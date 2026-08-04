@@ -294,7 +294,7 @@ function isMob(){return document.body.classList.contains('mob');}
 var mDay=0,mStep=0;
 function dSteps(){return days[mDay].steps;}
 function mCur(){var s=dSteps()[mStep];return s.type==='one'?s.items[0]:s.items[s.chosen];}
-function openPop(it){var L2=it&&it.layer;if(!L2)return;if(L2.openPopup)L2.openPopup();else if(L2._pop&&L2._pop.openPopup)L2._pop.openPopup(L2._mid);}
+function openPop(it){var L2=it&&it.layer;if(!L2)return;if(L2._popup)L2.openPopup();else if(L2._pop)L2._pop.openPopup(L2._mid);} // grupo (ruta) no tiene popup propio → abre el de su línea
 var foodLine=L.polyline([],{color:'#b23a2a',weight:3,opacity:.85,dashArray:'3 7'}); // ruta a la comida elegida
 function mApply(fly){
   var day=days[mDay],s=dSteps()[mStep];
