@@ -103,7 +103,12 @@ function segLayer(seg){
   var end=L.circleMarker(b,{radius:5,color:'#fff',weight:2,fillColor:seg.color,fillOpacity:1}).bindPopup('<div class="lp">Llega a <b>'+esc(e.b)+'</b></div>');
   var dur=seg.durTxt?(' · <b>'+esc(seg.durTxt)+'</b>'):'';
   var pop='<div class="lp">'+esc(seg.name)+dur+'</div>';pl.bindPopup(pop);hit.bindPopup(pop);
-  var g=L.layerGroup([hit,pl,dec,start,end]);g._pts=[L.latLng(a[0],a[1]),L.latLng(b[0],b[1])];
+  var parts=[hit,pl,dec];
+  // estaciones intermedias (los vértices del tren SON estaciones)
+  if(seg.mode!=='walk'){for(var i=1;i<seg.coords.length-1;i++){
+    parts.push(L.circleMarker(seg.coords[i],{radius:3.5,color:seg.color,weight:1.5,fillColor:'#fff',fillOpacity:1,interactive:false}));}}
+  parts.push(start,end);
+  var g=L.layerGroup(parts);g._pts=[L.latLng(a[0],a[1]),L.latLng(b[0],b[1])];
   return g;
 }
 
