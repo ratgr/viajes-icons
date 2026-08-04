@@ -249,7 +249,7 @@ days.forEach(function(d){d.steps=buildStepsFor(d);});
 // hotel/aeropuerto de SALIDA: si está posicionado antes de un lugar con hora menor, su hora nombrada es la de regreso
 // nocturno; corregir a la hora de inicio del día (te levantas y sales del hotel)
 days.forEach(function(d){d.seq.forEach(function(it,idx){
-  if((it.kind==='hotel'||it.kind==='aero')&&/^\d\d:\d\d$/.test(it.time||'')){
+  if((it.kind==='hotel'||it.kind==='aero')&&idx<=1&&/^\d\d:\d\d$/.test(it.time||'')){ // solo hotel de salida (arranque del día)
     for(var j=idx+1;j<d.seq.length;j++){var nx=d.seq[j];if(!nx||nx.meal||nx.seg)continue;
       if(/^\d\d:\d\d$/.test(nx.time||'')&&nx.time<it.time){if(d.startTime){it.time=d.startTime;it.fixTime=d.startTime;}break;}}
   }});});
