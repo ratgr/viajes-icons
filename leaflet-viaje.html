@@ -198,12 +198,21 @@ DATA.days.forEach(function(d){
   var seq=[],added={};hoteles.forEach(function(h){seq.push(h);});
   segs.forEach(function(sg,i){seq.push(sg);if(arrMap[i])arrMap[i].forEach(function(st){seq.push(st);added[st.num]=1;});});
   stops.forEach(function(st){if(!added[st.num])seq.push(st);});
+  function wkm(m){return m<1000?(Math.round(m/10)*10+' m'):((m/1000).toFixed(1)+' km');}
+  function wmin(m){return Math.max(5,Math.round(m/76.7/5)*5);}
   meals.forEach(function(me){
     var pos=seq.length;for(var i2=0;i2<seq.length;i2++){var it=seq[i2];if(it.time&&me.time&&it.time>me.time){pos=i2;break;}}
     var fromLL=null;for(var j=pos-1;j>=0;j--){var pv=seq[j];if(pv&&!pv.meal&&pv.ll){fromLL=pv.ll;break;}}
-    me.fromLL=fromLL;
-    me.options.forEach(function(o){if(fromLL){o.route=L.polyline([fromLL,o.ll],{color:'#b23a2a',weight:3,opacity:.85,dashArray:'3 7'});
-      var mm=fromLL.distanceTo(o.ll);o.rmin=Math.max(5,Math.round(mm/76.7/5)*5);o.rtxt='🚶 '+(mm<1000?(Math.round(mm/10)*10+' m'):((mm/1000).toFixed(1)+' km'))+' · ~'+o.rmin+' min';}});
+    var toLL=null;for(var j2=pos;j2<seq.length;j2++){var nx=seq[j2];if(nx&&!nx.meal&&nx.ll){toLL=nx.ll;break;}}
+    me.fromLL=fromLL;me.toLL=toLL;
+    me.options.forEach(function(o){
+      var parts=[];
+      if(fromLL){o.route=L.polyline([fromLL,o.ll],{color:'#b23a2a',weight:3,opacity:.9,dashArray:'3 7'}); // ida
+        var mi=fromLL.distanceTo(o.ll);o.rmin=wmin(mi);parts.push('ida '+wkm(mi)+' ~'+o.rmin+' min');}
+      if(toLL){o.route2=L.polyline([o.ll,toLL],{color:'#c8791f',weight:3,opacity:.9,dashArray:'1 6'}); // regreso
+        var mv=o.ll.distanceTo(toLL);o.rmin2=wmin(mv);parts.push('vuelta '+wkm(mv)+' ~'+o.rmin2+' min');}
+      o.rtxt=parts.length?('🚶 '+parts.join(' · ')):'';
+    });
     seq.splice(pos,0,me);
   });
   restos.forEach(function(r){seq.push(r);});
@@ -212,7 +221,7 @@ DATA.days.forEach(function(d){
 days.forEach(function(d){d.steps=buildStepsFor(d);});
 
 function itemSet(it,on){if(on){if(!map.hasLayer(it.layer))map.addLayer(it.layer);}else{if(map.hasLayer(it.layer))map.removeLayer(it.layer);}
-  if(it.route){if(on){if(!map.hasLayer(it.route))map.addLayer(it.route);}else{if(map.hasLayer(it.route))map.removeLayer(it.route);}} // ruta a la comida va con su lugar
+  [it.route,it.route2].forEach(function(r){if(r){if(on){if(!map.hasLayer(r))map.addLayer(r);}else{if(map.hasLayer(r))map.removeLayer(r);}}}); // ida+regreso van con su lugar
   if(it.cb)it.cb.checked=on;}
 function dayPts(day){var pts=[];day.all.forEach(function(it){if(it.layer.getLatLng)pts.push(it.layer.getLatLng());else if(it.layer._pts)pts.push.apply(pts,it.layer._pts);});return pts;}
 function zoomDay(day){var pts=dayPts(day);if(pts.length)map.fitBounds(L.latLngBounds(pts).pad(.15));}
