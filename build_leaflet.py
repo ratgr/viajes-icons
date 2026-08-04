@@ -1,14 +1,17 @@
 # -*- coding: utf-8 -*-
-"""Genera leaflet-viaje.html — app de mapa autocontenida (Leaflet + OSM, sin key).
-30 capas por día (lugares + rutas), paradas numeradas, restos por nivel, flechas."""
-import json
+"""leaflet-viaje.html — mapa autocontenido (Leaflet + Positron, sin key).
+Itinerario por día con casillas integradas; rutas INTERCALADAS con sus lugares
+en orden (cada ruta va antes del lugar al que lleva). Hoteles/aeropuertos viven
+en los días donde se usan. Popup limpio: nombre (link al plan) · hora · tiempo,
+foto, descripción, 🏛️ historia, Maps. Escritorio: panel acoplado; móvil: overlay."""
+import os
 import sys
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-SD = r"C:/Users/Ricardo/AppData/Local/Temp/claude/d--dev-tamper-finances/81928241-1549-48b6-9a85-7eac7bb94ebc/scratchpad"
+SD = os.path.dirname(os.path.abspath(__file__))
 DATA = open(SD + "/viaje-data.json", encoding="utf-8").read()
 
-HTML = """<!doctype html>
+HTML = r"""<!doctype html>
 <html lang="es"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -17,135 +20,481 @@ HTML = """<!doctype html>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-polylinedecorator@1.6.0/dist/leaflet.polylineDecorator.js"></script>
 <style>
-  html,body{margin:0;height:100%;font-family:system-ui,sans-serif}
+  html,body{margin:0;height:100%;font-family:system-ui,sans-serif;color:#241f1c}
   #map{position:absolute;inset:0}
   .panel{position:absolute;z-index:1000;top:10px;left:10px;background:#fff;border-radius:10px;
-    box-shadow:0 4px 18px rgba(0,0,0,.25);max-height:calc(100% - 20px);overflow:auto;width:230px}
-  .panel h1{font-size:15px;margin:0;padding:12px 14px 8px}
-  .panel .sub{font-size:11px;color:#666;padding:0 14px 8px}
-  .daybtns{display:flex;flex-wrap:wrap;gap:4px;padding:0 10px 10px}
+    box-shadow:0 4px 18px rgba(0,0,0,.28);max-height:calc(100% - 20px);display:flex;flex-direction:column;width:300px}
+  .phead{padding:9px 12px 4px}
+  .phead h1{font-size:15px;margin:0}
+  .phead .sub{font-size:10.5px;color:#777;margin-top:2px}
+  .daybtns{display:flex;flex-wrap:wrap;gap:4px;padding:6px 10px 8px;border-bottom:1px solid #eee}
   .daybtns button{font-size:11px;border:1px solid #ccc;background:#f7f7f7;border-radius:6px;padding:3px 6px;cursor:pointer}
   .daybtns button.on{background:#b23a2a;color:#fff;border-color:#b23a2a}
   .daybtns .allbtn{background:#2c6ba0;color:#fff;border-color:#2c6ba0}
-  .lyr{padding:2px 14px;font-size:12px;display:flex;align-items:center;gap:6px;border-top:1px solid #eee}
-  .lyr label{display:flex;align-items:center;gap:5px;cursor:pointer;flex:1}
-  .lyr .swatch{width:10px;height:10px;border-radius:50%}
-  .num{background:#b23a2a;color:#fff;border-radius:50%;width:20px;height:20px;line-height:20px;
-    text-align:center;font-size:11px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+  .daybtns .nonebtn{background:#777;color:#fff;border-color:#777}
+  .tree{overflow:auto;padding:2px 0 12px}
+  .dayg{border-top:1px solid #eee}
+  .dhead{display:flex;align-items:center;gap:7px;padding:6px 10px;cursor:pointer;user-select:none}
+  .dhead:hover{background:#faf7f3}
+  .dhead .caret{width:11px;color:#999;font-size:11px;transition:transform .15s}
+  .dhead.open .caret{transform:rotate(90deg)}
+  .dhead .dname{font-size:12.5px;font-weight:700;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dhead .dtime{font-size:10.5px;color:#b23a2a;background:#f6ebe8;border-radius:5px;padding:1px 5px;flex:0 0 auto}
+  .dbody{display:none;padding:0 0 6px 4px}
+  .dbody.open{display:block}
+  .sublbl{font-size:10.5px;color:#8a8078;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:6px 10px 1px}
+  .it{display:flex;gap:7px;align-items:flex-start;padding:3px 10px 3px 8px;border-left:3px solid transparent}
+  .it:hover{background:#f4f7fa;border-left-color:#2c6ba0}
+  .it.sel{background:#fdeee9;border-left-color:#b23a2a;box-shadow:inset 0 0 0 1px rgba(178,58,42,.25)}
+  .selmark{filter:drop-shadow(0 0 5px rgba(178,58,42,.9)) drop-shadow(0 0 2px rgba(178,58,42,.9));z-index:900!important}
+  .it.rt{padding-top:1px;padding-bottom:1px}
+  .it .ck{margin:2px 0 0;flex:0 0 auto}
+  .it .pin{width:12px;height:12px;border-radius:50%;flex:0 0 auto;margin-top:2px;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.15)}
+  .it .npin{background:#b23a2a;color:#fff;border-radius:50%;width:18px;height:18px;line-height:18px;text-align:center;font-size:10.5px;font-weight:700;flex:0 0 auto;margin-top:0}
+  .it .ln{width:16px;height:0;border-top:3px solid;flex:0 0 auto;margin-top:8px}
+  .it.walk .ln{border-top-style:dotted;border-top-width:3px}
+  .it .bd{min-width:0;flex:1;cursor:pointer}
+  .it .nm{font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .it.rt .nm{font-weight:500;font-size:11.5px;color:#6a625a}
+  .it .ds{font-size:10.5px;color:#7a7268;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .it .tm{font-size:11px;font-weight:700;font-variant-numeric:tabular-nums;flex:0 0 auto;padding-top:1px;white-space:nowrap}
+  .tm.fix{color:#b23a2a}.tm.est{color:#9a9188}
+  .tm.warn{color:#fff;background:#c0392b;border-radius:5px;padding:0 4px}
+  .it.conflict{background:#fdecea}
+  .lp{font-size:13px;max-width:270px}
+  .lp .tt{font-weight:700;font-size:14px}.lp .tt a{color:inherit;text-decoration:none;border-bottom:1px dotted #b23a2a}
+  .lp .meta{color:#8a7f72;font-weight:600;font-size:12px}
+  .lp .pf{width:100%;max-height:150px;object-fit:cover;border-radius:8px;margin:7px 0;display:block;background:#eee}
+  .lp .dsc{margin:5px 0;font-size:12.5px}
+  .lp .ph{font-size:11.5px;color:#6a625a;margin:6px 0;line-height:1.35}
+  .lp a.gm{color:#b23a2a;font-weight:700;text-decoration:none}
+  .num{background:#b23a2a;color:#fff;border-radius:50%;width:20px;height:20px;line-height:20px;text-align:center;font-size:11px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.4)}
   .dot{border-radius:50%;width:13px;height:13px;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4)}
-  .lp{font-size:13px}.lp b{font-size:14px}.lp a{color:#b23a2a;font-weight:700;text-decoration:none}
-  .toggle{position:absolute;z-index:1001;top:10px;left:250px;background:#fff;border:none;border-radius:8px;
-    padding:8px 10px;box-shadow:0 2px 8px rgba(0,0,0,.25);cursor:pointer;font-size:13px;display:none}
-  @media(max-width:600px){.panel{width:200px}.toggle{left:220px}}
+  .fold{position:absolute;z-index:1001;top:10px;right:10px;background:#fff;border:none;border-radius:8px;width:36px;height:36px;box-shadow:0 2px 8px rgba(0,0,0,.25);cursor:pointer;font-size:17px;display:none}
+  @media(min-width:821px){
+    body{overflow:hidden}
+    .panel{position:absolute;top:0;left:0;height:100%;max-height:100%;width:380px;border-radius:0;box-shadow:2px 0 12px rgba(0,0,0,.12)}
+    #map{left:380px}
+    .it .nm,.it .ds{white-space:normal}
+  }
+  /* modo móvil: barras de recorrido paso a paso */
+  .mbar{position:absolute;left:8px;right:8px;z-index:1002;display:flex;gap:6px;align-items:center;pointer-events:none}
+  .mbar>*{pointer-events:auto}
+  .mbar.mtop{top:8px}.mbar.mbot{bottom:8px}
+  /* escritorio (no móvil): barras a la derecha del panel, nunca lo tapan */
+  body:not(.mob) .mbar{left:392px;right:14px}
+  body:not(.mob) .mbar.mtop{top:12px}
+  body:not(.mob) .mbar.mbot{bottom:12px}
+  /* grupo de comida colapsable + ruta a cada opción */
+  .mealh{cursor:pointer;display:flex;align-items:center;gap:5px}
+  .mealh .mcar{margin-left:auto;color:#b23a2a;font-size:11px;transition:transform .15s}
+  .mealh.closed .mcar{transform:rotate(-90deg)}
+  .mealc.closed{display:none}
+  .optgrp{margin:2px 0 7px;border-left:2px solid #efe6e0;padding-left:3px}
+  .dimmed{opacity:.4} /* marcador de alternativa (no elegida) */
+  .it.dimrow .nm,.it.dimrow .ds{opacity:.55}
+  .mbar .nav{width:40px;height:40px;border-radius:10px;border:none;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.28);font-size:22px;line-height:1;cursor:pointer;flex:0 0 auto}
+  .mbar .nav:disabled{opacity:.4}
+  .mbar .cur{flex:1;background:#fff;border:none;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.28);padding:9px 10px;font-size:13px;font-weight:700;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mbar .cur .stp{font-size:10px;color:#8a7f72;font-weight:600}
+  .mbar .mopts{flex:1;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+  .mbar .mopts::-webkit-scrollbar{display:none}
+  .mbar .opt{flex:0 0 auto;background:#fff;border:1px solid #ccc;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.22);padding:7px 10px;font-size:12px;font-weight:600;cursor:pointer;max-width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mbar .opt.on{background:#b23a2a;color:#fff;border-color:#b23a2a}
+  .daymenu{position:absolute;inset:0;z-index:1004;background:rgba(0,0,0,.4);display:flex;flex-direction:column;justify-content:center;gap:6px;padding:18px}
+  .daymenu button{background:#fff;border:none;border-radius:9px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;text-align:left}
+  .daymenu button.on{background:#b23a2a;color:#fff}
+  body.mob .panel{display:none}
+  body.mob .fold{display:none}
+  body.mob .mbar{display:flex}
+  /* que las barras no tapen los controles del mapa (zoom, capas, atribución) */
+  .leaflet-top{top:58px}.leaflet-bottom{bottom:58px}
+  /* herramienta: dibujar ruta a mano y copiar coordenadas */
+  #drawbox{position:absolute;z-index:1500;right:12px;bottom:72px;width:250px;background:#fff;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.32);padding:10px;font-size:12px}
+  #drawbox .dbhd{font-weight:700;margin-bottom:6px;font-size:11.5px;line-height:1.3}
+  #drawbox textarea{width:100%;box-sizing:border-box;font-family:ui-monospace,monospace;font-size:11px;resize:vertical;border:1px solid #ccc;border-radius:6px;padding:5px}
+  #drawbox .dbcount{font-size:10.5px;color:#888;margin:3px 0}
+  #drawbox .dbbtns{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+  #drawbox .dbbtns button{font-size:11px;border:1px solid #ccc;background:#f7f7f7;border-radius:6px;padding:4px 7px;cursor:pointer}
+  #drawbox .dbbtns #dbcopy{background:#e6007e;color:#fff;border-color:#e6007e}
+  .leaflet-bar a.drawon{background:#e6007e;color:#fff}
+  .dbtip{background:#e6007e;color:#fff;border:none;box-shadow:none;font-size:10px;font-weight:700;padding:0 3px;border-radius:4px}
+  .dbtip::before{display:none}
 </style></head><body>
 <div id="map"></div>
+<button class="fold" id="fold">☰</button>
+<div class="mbar mtop" id="mtop"></div>
+<div class="mbar mbot" id="mbot"></div>
 <div class="panel" id="panel">
-  <h1>⛩️ Japón 2026</h1>
-  <div class="sub">Toca un día para ver sus lugares y ruta. Cada día = 2 capas (📍 lugares · 🚇 rutas).</div>
+  <div class="phead"><h1>⛩️ Japón 2026 · mapa por día</h1>
+    <div class="sub">Casilla = prender/apagar. Toca el nombre para volar ahí. Rojo = hora fija · gris = estimada.</div></div>
   <div class="daybtns" id="daybtns"></div>
-  <div id="lyrs"></div>
+  <div class="tree" id="tree"></div>
 </div>
 <script>
 var DATA = __DATA__;
+var APP='https://ratgr.github.io/viajes-icons/app/japon.html';
 var map = L.map('map',{zoomControl:true}).setView([35.0,135.6],6);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-  maxZoom:19, attribution:'© OpenStreetMap'}).addTo(map);
+var bases={
+  'Claro (Positron)':L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:20,subdomains:'abcd',attribution:'© OpenStreetMap © CARTO'}),
+  'Sin etiquetas':L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',{maxZoom:20,subdomains:'abcd',attribution:'© OpenStreetMap © CARTO'}),
+  'Color (Voyager)':L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{maxZoom:20,subdomains:'abcd',attribution:'© OpenStreetMap © CARTO'}),
+  'Satélite':L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'© Esri'})
+};
+bases['Claro (Positron)'].addTo(map);
+L.control.layers(bases,null,{position:'topright'}).addTo(map);
 
-var TIER = {Take:'#4a7d3a', Ai:'#2c6ba0', Shu:'#b23a2a'};
-function placeColor(p){
-  if(p.kind==='site'||p.kind==='stop') return '#b23a2a';
-  if(p.kind==='hotel') return '#f0a500';
-  if(p.kind==='aero') return '#7b4fa6';
-  return TIER[p.tier]||'#777';
-}
-function placeMarker(p){
+var TIER={Take:'#4a7d3a',Ai:'#2c6ba0',Shu:'#b23a2a'};
+function esc(s){return String(s||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function pColor(kind,tier){if(kind==='site'||kind==='stop')return '#b23a2a';if(kind==='hotel')return '#f0a500';if(kind==='aero')return '#7b4fa6';return TIER[tier]||'#777';}
+function norm(s){return String(s||'').replace(/^[\s⭐🍜🏨✈️📍·]+/,'').replace(/\s*\(d\d+\)\s*$/,'').replace(/^\d+\.\s*/,'').replace(/\d\d:\d\d\s*·?\s*/,'').trim().toLowerCase();}
+function stopTime(name){var m=/(\d\d:\d\d)/.exec(name);return m?m[1]:'';}
+function stopClean(name){return name.replace(/^\d+\.\s*/,'').replace(/\d\d:\d\d\s*·?\s*/,'').replace(/\s*\(d\d+\)\s*$/,'').trim();}
+function segEnds(name){var m=name.split(':').pop().split('⇒')[0];var a=m.split('→');return a.length>=2?{a:a[0].trim(),b:a[1].trim()}:null;}
+function segTarget(name){var i=name.indexOf('⇒');return i>=0?norm(name.slice(i+1)):'';}
+function fmtMin(m){if(!m)return '';if(m<60)return '~'+m+' min';var h=(m/60|0),mm=m%60;return '~'+h+' h'+(mm?(' '+mm+' min'):'');}
+
+function placeMarker(it){
   var m;
-  if(p.kind==='stop' && p.order){
-    m=L.marker([p.lat,p.lng],{icon:L.divIcon({className:'',html:'<div class="num">'+p.order+'</div>',iconSize:[20,20],iconAnchor:[10,10]})});
-  } else {
-    var c=placeColor(p);
-    m=L.marker([p.lat,p.lng],{icon:L.divIcon({className:'',html:'<div class="dot" style="background:'+c+'"></div>',iconSize:[13,13],iconAnchor:[7,7]})});
-  }
-  var tier=p.tier?(' · '+p.tier):'';
-  m.bindPopup('<div class="lp"><b>'+esc(p.name)+'</b>'+tier+'<br>'+(p.desc?esc(p.desc)+'<br>':'')+
-    '<a href="'+p.maps+'" target="_blank">Abrir en Google Maps ↗</a></div>');
+  if(it.num){m=L.marker(it.ll,{icon:L.divIcon({className:'',html:'<div class="num">'+it.num+'</div>',iconSize:[20,20],iconAnchor:[10,10]})});}
+  else{m=L.marker(it.ll,{icon:L.divIcon({className:'',html:'<div class="dot" style="background:'+it.color+'"></div>',iconSize:[13,13],iconAnchor:[7,7]})});}
+  var meta=[];if(it.tier)meta.push(it.tier);if(it.time)meta.push(it.time);if(it.incTxt)meta.push(it.incTxt);
+  var metaHtml=meta.length?(' <span class="meta">· '+esc(meta.join(' · '))+'</span>'):'';
+  var img=it.foto?('<img class="pf" src="'+it.foto+'" loading="lazy" onerror="this.style.display=\'none\'">'):'';
+  var desc=it.desc?('<div class="dsc">'+esc(it.desc)+'</div>'):'';
+  var hist=it.hist?('<div class="ph">🏛️ '+esc(it.hist)+'</div>'):'';
+  var html='<div class="lp"><div class="tt"><a href="'+APP+'" target="_blank" title="Ver el plan">'+esc(it.title)+'</a>'+metaHtml+'</div>'+
+    img+desc+hist+(it.maps?'<a class="gm" href="'+it.maps+'" target="_blank">Abrir en Google Maps ↗</a>':'')+'</div>';
+  m.bindPopup(html,{maxWidth:285});
+  m.on('click',function(){if(typeof selectStep==='function')selectStep(it,false);});
   return m;
 }
-function esc(s){return String(s||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function segLayer(seg){
-  var w = seg.mode==='walk'?3:(seg.mode==='train'?6:5);
-  var dash = seg.mode==='walk'?'4 7':null;
+  var w=seg.mode==='walk'?3:(seg.mode==='train'?6:5),dash=seg.mode==='walk'?'4 7':null;
   var pl=L.polyline(seg.coords,{color:seg.color,weight:w,opacity:.9,dashArray:dash});
-  var dec=L.polylineDecorator(pl,{patterns:[{offset:'8%',repeat:'22%',
-    symbol:L.Symbol.arrowHead({pixelSize:9,pathOptions:{color:seg.color,fillOpacity:.9,weight:0}})}]});
-  var g=L.layerGroup([pl,dec]);
-  pl.bindPopup('<div class="lp">'+esc(seg.name)+'</div>');
+  var hit=L.polyline(seg.coords,{color:seg.color,weight:16,opacity:0});
+  var dec=L.polylineDecorator(pl,{patterns:[{offset:'10%',repeat:'25%',symbol:L.Symbol.arrowHead({pixelSize:9,pathOptions:{color:seg.color,fillOpacity:.95,weight:0}})}]});
+  var a=seg.coords[0],b=seg.coords[seg.coords.length-1],e=segEnds(seg.name)||{a:'inicio',b:'fin'};
+  var start=L.circleMarker(a,{radius:5,color:seg.color,weight:2,fillColor:'#fff',fillOpacity:1}).bindPopup('<div class="lp">Sale de <b>'+esc(e.a)+'</b></div>');
+  var end=L.circleMarker(b,{radius:5,color:'#fff',weight:2,fillColor:seg.color,fillOpacity:1}).bindPopup('<div class="lp">Llega a <b>'+esc(e.b)+'</b></div>');
+  var det=[seg.durTxt,seg.distTxt].filter(Boolean).join(' · ');
+  var pop='<div class="lp">'+esc(seg.name)+(det?(' · <b>'+esc(det)+'</b>'):'')+'</div>';pl.bindPopup(pop);hit.bindPopup(pop);
+  var parts=[hit,pl,dec];
+  if(seg.mode!=='walk'){for(var i=1;i<seg.coords.length-1;i++){parts.push(L.circleMarker(seg.coords[i],{radius:3.5,color:seg.color,weight:1.5,fillColor:'#fff',fillOpacity:1,interactive:false}));}}
+  parts.push(start,end);
+  var g=L.layerGroup(parts);g._pts=[L.latLng(a[0],a[1]),L.latLng(b[0],b[1])];g._pop=pl;g._hit=hit;g._mid=pl.getBounds().getCenter();
   return g;
 }
 
-// construir capas por día
-var dayLayers=[]; // {key,label,places:LayerGroup,segs:LayerGroup}
+// ---- modelo por día: paradas absorben sitios; rutas intercaladas por su ⇒destino ----
+var days=[];
 DATA.days.forEach(function(d){
-  var pg=L.layerGroup(d.places.map(placeMarker));
-  var sg=L.layerGroup(d.segments.map(segLayer));
-  dayLayers.push({key:d.key,label:d.label,places:pg,segs:sg});
-});
-// capa fija de hoteles/aeropuertos
-var fixedG=L.layerGroup(DATA.fixed.map(placeMarker));
-
-var lyrs=document.getElementById('lyrs'), daybtns=document.getElementById('daybtns');
-function row(label,swatch,layer,on){
-  var div=document.createElement('div');div.className='lyr';
-  var id='c'+Math.random().toString(36).slice(2);
-  div.innerHTML='<label><input type="checkbox" id="'+id+'" '+(on?'checked':'')+'>'+
-    '<span class="swatch" style="background:'+swatch+'"></span>'+label+'</label>';
-  lyrs.appendChild(div);
-  var cb=div.querySelector('input');
-  cb.addEventListener('change',function(){cb.checked?map.addLayer(layer):map.removeLayer(layer);});
-  if(on)map.addLayer(layer);
-  return cb;
-}
-// botones de día (encienden/apagan ambas capas del día y centran)
-DATA.days.forEach(function(d,i){
-  var b=document.createElement('button');b.textContent=d.key;
-  b.addEventListener('click',function(){
-    var L1=dayLayers[i].places, L2=dayLayers[i].segs;
-    var on=!map.hasLayer(L1);
-    on?map.addLayer(L1):map.removeLayer(L1);
-    on?map.addLayer(L2):map.removeLayer(L2);
-    b.classList.toggle('on',on);
-    // sincronizar checkboxes
-    cbPlaces[i].checked=on; cbSegs[i].checked=on;
-    if(on){var all=[];dayLayers[i].places.eachLayer(function(m){all.push(m.getLatLng());});
-      dayLayers[i].segs.eachLayer(function(g){g.eachLayer&&g.eachLayer(function(x){x.getLatLngs&&all.push.apply(all,x.getLatLngs());});});
-      if(all.length)map.fitBounds(L.latLngBounds(all).pad(.15));}
+  var stops=d.places.filter(function(p){return p.kind==='stop';})
+    .map(function(p){return {kind:'stop',num:p.order,title:stopClean(p.name),time:stopTime(p.name),
+      desc:'',tier:'',maps:'https://www.google.com/maps/search/?api=1&query='+p.lat+','+p.lng,foto:'',hist:'',
+      color:'#b23a2a',ll:L.latLng(p.lat,p.lng),inc:0,fixTime:p.fixTime};})
+    .sort(function(a,b){return a.num-b.num;});
+  var byNorm={};stops.forEach(function(s){byNorm[norm(s.title)]=s;});
+  var hoteles=[],restos=[];
+  d.places.filter(function(p){return p.kind!=='stop';}).forEach(function(p){
+    var s=byNorm[norm(p.name)];
+    if(s&&p.kind==='site'){s.desc=p.desc;s.maps=p.maps;s.foto=p.foto;s.hist=p.hist;return;}
+    var it={kind:p.kind,num:0,title:p.name,time:p.time||'',fixTime:p.time||'',desc:p.desc,tier:p.tier,foto:p.foto,hist:p.hist,key:p.key||'',
+      maps:p.maps,color:pColor(p.kind,p.tier),ll:L.latLng(p.lat,p.lng)};
+    (p.kind==='hotel'||p.kind==='aero')?hoteles.push(it):restos.push(it);
   });
-  daybtns.appendChild(b);
+  var segs=d.segments.map(function(s){var e=segEnds(s.name),cd=s.coords;return {seg:true,layer:segLayer(s),
+    name:s.name,title:(e?(e.a+' → '+e.b):s.name),color:s.color,durTxt:s.durTxt,distTxt:s.distTxt,dur:s.dur||0,mode:s.mode,coordsLL:cd,
+    ord:parseInt((/·(\d+)/.exec(s.name)||[0,'999'])[1],10),end:L.latLng(cd[cd.length-1][0],cd[cd.length-1][1])};});
+  segs.sort(function(a,b){return a.ord-b.ord;});
+  segs.forEach(function(it){[it.layer._hit,it.layer._pop].forEach(function(ln){if(ln)ln.on('click',function(){selectStep(it,false);});});}); // clic en ruta = seleccionarla
+  // cada parada va TRAS el tramo que llega a ella (fin del tramo más cercano)
+  stops.forEach(function(st){var best=-1,bd=1e12;segs.forEach(function(sg,i){var dd=st.ll.distanceTo(sg.end);if(dd<bd){bd=dd;best=i;}});st.arr=best;});
+  var arrMap={};stops.forEach(function(st){(arrMap[st.arr]=arrMap[st.arr]||[]).push(st);});
+  // tiempo de traslado acumulado hasta cada parada (· ~X min)
+  var acc=0;segs.forEach(function(sg,i){acc+=sg.dur;if(arrMap[i]){arrMap[i].forEach(function(st){st.inc=acc;st.incTxt=fmtMin(acc);});acc=0;}});
+  // comidas por hora: cada una es un grupo de opciones (marcadores propios)
+  var meals=(d.meals||[]).map(function(me){
+    var opts=me.opts.map(function(o){var it={kind:'resto',num:0,title:o.name,time:me.time||'',desc:o.desc,tier:o.tier,foto:o.foto,hist:'',
+      key:o.key,mealt:me.time,maps:o.maps,color:pColor('resto',o.tier),ll:L.latLng(o.lat,o.lng)};return it;});
+    return {meal:true,time:me.time,options:opts,chosen:0};
+  });
+  var mkeys={};meals.forEach(function(me){me.options.forEach(function(o){if(o.key)mkeys[o.key]=1;});});
+  restos=restos.filter(function(r){return !(r.key&&mkeys[r.key]);}); // los que ya son opción de comida salen de "sueltos"
+  // marcadores (tras calcular inc, para el meta del popup)
+  var opall=[];meals.forEach(function(me){opall=opall.concat(me.options);});
+  stops.concat(hoteles,restos,opall).forEach(function(it){it.layer=placeMarker(it);});
+  // secuencia intercalada: hotel → (tramos… parada)… → comidas por hora → restaurantes sueltos
+  // ubicar hoteles/aeropuertos por su conexión a las rutas (no todos al inicio)
+  var farS=[],farE=[],beforeSeg={},afterSeg={};
+  hoteles.forEach(function(h){
+    var bI=-1,bD=1e12,bSide='start';
+    segs.forEach(function(sg,i){var A=L.latLng(sg.coordsLL[0][0],sg.coordsLL[0][1]),da=h.ll.distanceTo(A),db=h.ll.distanceTo(sg.end);
+      if(da<bD){bD=da;bI=i;bSide='start';}if(db<bD){bD=db;bI=i;bSide='end';}});
+    if(bI<0||bD>30000){farS.push(h);} // lejos de toda ruta → aeropuerto de salida (inicio del día)
+    else if(bSide==='start')(beforeSeg[bI]=beforeSeg[bI]||[]).push(h);
+    else (afterSeg[bI]=afterSeg[bI]||[]).push(h);
+  });
+  var seq=[],added={};
+  farS.forEach(function(h){seq.push(h);}); // aeropuerto de salida primero
+  segs.forEach(function(sg,i){
+    (beforeSeg[i]||[]).forEach(function(h){seq.push(h);}); // origen del tramo (aeropuerto de llegada)
+    seq.push(sg);
+    if(arrMap[i])arrMap[i].forEach(function(st){seq.push(st);added[st.num]=1;});
+    (afterSeg[i]||[]).forEach(function(h){seq.push(h);}); // destino del tramo (hotel al llegar)
+  });
+  stops.forEach(function(st){if(!added[st.num])seq.push(st);});
+  function wkm(m){return m<1000?(Math.round(m/10)*10+' m'):((m/1000).toFixed(1)+' km');}
+  function wmin(m){return Math.max(5,Math.round(m/66.7/5)*5);} // 4 km/h (66.7 m/min)
+  var mroutes=[]; // ida/regreso como elementos separados
+  meals.forEach(function(me){
+    // ubicar la comida en su hora: TRAS la última parada cuya hora <= la de la comida (cronológico)
+    var pos=seq.length;
+    for(var pi=seq.length-1;pi>=0;pi--){var pit=seq[pi];if(pit&&!pit.meal&&pit.time&&/^\d\d:\d\d$/.test(pit.time)&&me.time&&pit.time<=me.time){pos=pi+1;break;}}
+    var fromLL=null;for(var j=pos-1;j>=0;j--){var pv=seq[j];if(pv&&!pv.meal&&pv.ll){fromLL=pv.ll;break;}}
+    var toLL=null;for(var j2=pos;j2<seq.length;j2++){var nx=seq[j2];if(nx&&!nx.meal&&nx.ll){toLL=nx.ll;break;}}
+    me.fromLL=fromLL;me.toLL=toLL;
+    me.options.forEach(function(o){
+      o.parts=[];
+      if(fromLL){var mi=fromLL.distanceTo(o.ll),pl=L.polyline([fromLL,o.ll],{color:'#b23a2a',weight:3,opacity:.9,dashArray:'3 7'});
+        pl.bindPopup('<div class="lp">🚶 Ida a <b>'+esc(o.title)+'</b> · '+wkm(mi)+' · ~'+wmin(mi)+' min</div>');
+        var ida={seg:true,layer:pl,optRef:o,title:'ida → '+o.title,color:'#b23a2a',mode:'walk',durTxt:'~'+wmin(mi)+' min',distTxt:wkm(mi),mealt:me.time,coordsLL:[[fromLL.lat,fromLL.lng],[o.ll.lat,o.ll.lng]]};
+        o.ida=ida;o.parts.push(ida);mroutes.push(ida);pl.on('click',function(){selectStep(ida,false);});}
+      o.parts.push(o);
+      if(toLL){var mv=o.ll.distanceTo(toLL),pl2=L.polyline([o.ll,toLL],{color:'#c8791f',weight:3,opacity:.9,dashArray:'1 6'});
+        pl2.bindPopup('<div class="lp">🚶 Regreso al itinerario · '+wkm(mv)+' · ~'+wmin(mv)+' min</div>');
+        var reg={seg:true,layer:pl2,optRef:o,title:'regreso → itinerario',color:'#c8791f',mode:'walk',durTxt:'~'+wmin(mv)+' min',distTxt:wkm(mv),mealt:me.time,coordsLL:[[o.ll.lat,o.ll.lng],[toLL.lat,toLL.lng]]};
+        o.reg=reg;o.parts.push(reg);mroutes.push(reg);pl2.on('click',function(){selectStep(reg,false);});}
+    });
+    seq.splice(pos,0,me);
+  });
+  restos.forEach(function(r){seq.push(r);});
+  farE.forEach(function(h){seq.push(h);}); // aeropuerto de regreso al final
+  days.push({key:d.key,label:d.label,travelTxt:d.travelTxt,startTime:d.startTime||'',seq:seq,restos:restos,meals:meals,all:stops.concat(hoteles,restos,segs,opall,mroutes)});
+});
+days.forEach(function(d){d.steps=buildStepsFor(d);});
+// hotel/aeropuerto de SALIDA: si está posicionado antes de un lugar con hora menor, su hora nombrada es la de regreso
+// nocturno; corregir a la hora de inicio del día (te levantas y sales del hotel)
+days.forEach(function(d){d.seq.forEach(function(it,idx){
+  if((it.kind==='hotel'||it.kind==='aero')&&idx<=1&&/^\d\d:\d\d$/.test(it.time||'')){ // solo hotel de salida (arranque del día)
+    for(var j=idx+1;j<d.seq.length;j++){var nx=d.seq[j];if(!nx||nx.meal||nx.seg)continue;
+      if(/^\d\d:\d\d$/.test(nx.time||'')&&nx.time<it.time){if(d.startTime){it.time=d.startTime;it.fixTime=d.startTime;}break;}}
+  }});});
+// contradicciones: dentro de un día las horas deben ir en aumento; si una es menor que la previa, se marca
+var CONFLICTS=[];
+days.forEach(function(d){var last=null,lastIt=null;d.seq.forEach(function(it){
+  if(it.meal)return; // la comida se ubica por cercanía, no por hora → no participa del chequeo
+  var t=(it.time&&/^\d\d:\d\d$/.test(it.time))?it.time:'';
+  if(!/^\d\d:\d\d$/.test(t))return;
+  if(last!==null&&t<last){it.conflict=true;
+    CONFLICTS.push(d.key+': '+it.title+' '+t+' va DESPUÉS de '+(lastIt?lastIt.title:'?')+' '+last);}
+  last=t;lastIt=it;});});
+if(window.console)CONFLICTS.forEach(function(c){console.warn('⚠️ '+c);});
+window.CONFLICTS=CONFLICTS;
+var _cd=document.createElement('div');_cd.id='conflicts';_cd.style.display='none';_cd.textContent=CONFLICTS.length?CONFLICTS.join(' || '):'sin contradicciones';document.body.appendChild(_cd);
+
+function itemSet(it,on){if(on){if(!map.hasLayer(it.layer))map.addLayer(it.layer);}else{if(map.hasLayer(it.layer))map.removeLayer(it.layer);}if(it.cb)it.cb.checked=on;}
+function dimItem(it,dim){ // alternativas de comida con transparencia
+  if(it.seg&&it.layer&&it.layer.setStyle)it.layer.setStyle({opacity:dim?.3:.9});
+  else if(it.layer&&it.layer._icon)it.layer._icon.classList.toggle('dimmed',dim);
+  if(it._row)it._row.classList.toggle('dimrow',dim);}
+function dayPts(day){var pts=[];day.all.forEach(function(it){if(it.layer.getLatLng)pts.push(it.layer.getLatLng());else if(it.layer._pts)pts.push.apply(pts,it.layer._pts);});return pts;}
+function zoomDay(day){var pts=dayPts(day);if(pts.length)map.fitBounds(L.latLngBounds(pts).pad(.15));}
+function volar(it){selectStep(it,true);}
+
+var tree=document.getElementById('tree'),daybtns=document.getElementById('daybtns'),dayEls=[];
+function mkRow(it){
+  var row=document.createElement('div');row.className='it'+(it.seg?(' rt'+(it.mode==='walk'?' walk':'')):'');
+  var cb=document.createElement('input');cb.type='checkbox';cb.className='ck';it.cb=cb;
+  var vis;
+  if(it.seg){vis='<span class="ln" style="border-top-color:'+it.color+'"></span>';}
+  else if(it.num){vis='<span class="npin">'+it.num+'</span>';}
+  else{vis='<span class="pin" style="background:'+it.color+'"></span>';}
+  var ds=it.seg?[it.durTxt,it.distTxt].filter(Boolean).join(' · '):[it.tier,it.rtxt,it.desc].filter(Boolean).join(' · ');
+  var tm='';
+  if(it.time){var cls=it.conflict?'warn':(it.fixTime?'fix':'est');tm='<span class="tm '+cls+'">'+(it.conflict?'⚠️ ':'')+esc(it.time)+'</span>';}
+  else if(it.seg&&it.durTxt){tm='<span class="tm est">'+esc(it.durTxt)+'</span>';}
+  row.appendChild(cb);
+  row.insertAdjacentHTML('beforeend',vis+'<div class="bd"><div class="nm">'+esc(it.title)+'</div>'+(ds?'<div class="ds">'+esc(ds)+'</div>':'')+'</div>'+tm);
+  cb.addEventListener('change',function(){itemSet(it,cb.checked);syncMasters();});
+  row.querySelector('.bd').addEventListener('click',function(){volar(it);});
+  it._row=row;
+  return row;
+}
+// ---- resaltar el seleccionado (halo en ruta, glow en lugar, fila marcada) ----
+var selGlow=L.polyline([],{weight:13,opacity:.35,lineCap:'round',lineJoin:'round'});
+var selItem=null,selRow=null;
+function clearSel(){
+  if(selRow){selRow.classList.remove('sel');selRow=null;}
+  if(map.hasLayer(selGlow))map.removeLayer(selGlow);
+  if(selItem&&!selItem.seg&&selItem.layer&&selItem.layer._icon)selItem.layer._icon.classList.remove('selmark');
+  selItem=null;
+}
+function setSel(it){
+  clearSel();selItem=it;selRow=it._row||null;
+  if(selRow){selRow.classList.add('sel');if(selRow.scrollIntoView)selRow.scrollIntoView({block:'nearest'});}
+  if(it.seg){if(it.coordsLL){selGlow.setLatLngs(it.coordsLL).setStyle({color:it.color});selGlow.addTo(map).bringToBack();}}
+  else if(it.layer&&it.layer._icon){it.layer._icon.classList.add('selmark');}
+}
+function mealLabel(t){if(!t)return 'Comer';var h=parseInt(String(t).slice(0,2),10);return h<11?'Desayuno':(h<16?'Comida':'Cena');}
+function mkDay(day,open){
+  var g=document.createElement('div');g.className='dayg';
+  var head=document.createElement('div');head.className='dhead'+(open?' open':'');
+  var tt=day.travelTxt?('<span class="dtime">🕐 '+esc(day.travelTxt)+'</span>'):'';
+  head.innerHTML='<input type="checkbox" class="dm"><span class="caret">▶</span><span class="dname">'+esc(day.label)+'</span>'+tt;
+  var body=document.createElement('div');body.className='dbody'+(open?' open':'');
+  day.seq.forEach(function(it){
+    if(it.meal){
+      var mh=document.createElement('div');mh.className='sublbl mealh';
+      mh.innerHTML='🍴 '+mealLabel(it.time)+(it.time?(' · '+esc(it.time)):'')+' — elige <span class="mcar">▼</span>';
+      var mc=document.createElement('div');mc.className='mealc';
+      it.options.forEach(function(o){var og=document.createElement('div');og.className='optgrp';(o.parts||[o]).forEach(function(p){og.appendChild(mkRow(p));});mc.appendChild(og);});
+      mh.addEventListener('click',function(){mh.classList.toggle('closed');mc.classList.toggle('closed');});
+      body.appendChild(mh);body.appendChild(mc);
+    } else body.appendChild(mkRow(it));
+  });
+  var dm=head.querySelector('.dm');
+  head.addEventListener('click',function(e){if(e.target===dm)return;head.classList.toggle('open');body.classList.toggle('open');});
+  dm.addEventListener('click',function(e){e.stopPropagation();});
+  dm.addEventListener('change',function(){day.all.forEach(function(it){itemSet(it,dm.checked);});if(dm.checked){head.classList.add('open');body.classList.add('open');zoomDay(day);}syncMasters();});
+  g.appendChild(head);g.appendChild(body);
+  dayEls.push({day:day,head:head,body:body,dm:dm,chip:null});return g;
+}
+function syncMasters(){dayEls.forEach(function(de){var items=de.day.all,on=items.filter(function(it){return it.cb&&it.cb.checked;}).length;de.dm.checked=on===items.length&&on>0;de.dm.indeterminate=on>0&&on<items.length;if(de.chip)de.chip.classList.toggle('on',on>0);});}
+
+days.forEach(function(d,i){tree.appendChild(mkDay(d,i===0));});
+days.forEach(function(d,i){
+  var b=document.createElement('button');b.textContent=d.key;
+  b.addEventListener('click',function(){var items=d.all,anyOff=items.some(function(it){return !it.cb||!it.cb.checked;});items.forEach(function(it){itemSet(it,anyOff);});var de=dayEls[i];de.head.classList.add('open');de.body.classList.add('open');if(anyOff)zoomDay(d);syncMasters();});
+  daybtns.appendChild(b);dayEls[i].chip=b;
 });
 var allb=document.createElement('button');allb.className='allbtn';allb.textContent='Todos';
-allb.addEventListener('click',function(){
-  dayLayers.forEach(function(dl,i){map.addLayer(dl.places);map.addLayer(dl.segs);cbPlaces[i].checked=true;cbSegs[i].checked=true;});
-  document.querySelectorAll('.daybtns button:not(.allbtn):not(.nonebtn)').forEach(function(b){b.classList.add('on');});
-});
+allb.addEventListener('click',function(){days.forEach(function(d){d.all.forEach(function(it){itemSet(it,true);});});syncMasters();});
 daybtns.appendChild(allb);
 var noneb=document.createElement('button');noneb.className='nonebtn';noneb.textContent='Ninguno';
-noneb.addEventListener('click',function(){
-  dayLayers.forEach(function(dl,i){map.removeLayer(dl.places);map.removeLayer(dl.segs);cbPlaces[i].checked=false;cbSegs[i].checked=false;});
-  document.querySelectorAll('.daybtns button:not(.allbtn):not(.nonebtn)').forEach(function(b){b.classList.remove('on');});
-});
+noneb.addEventListener('click',function(){days.forEach(function(d){d.all.forEach(function(it){itemSet(it,false);});});syncMasters();});
 daybtns.appendChild(noneb);
 
-// checkboxes finas (lugares/rutas por día) + fijos
-var cbPlaces=[], cbSegs=[];
-row('🏨 Hoteles y aeropuertos','#f0a500',fixedG,true);
-dayLayers.forEach(function(dl,i){
-  var on = i===0;
-  cbPlaces.push(row('📍 '+dl.label,'#b23a2a',dl.places,on));
-  cbSegs.push(row('🚇 '+dl.key+' rutas','#2c6ba0',dl.segs,on));
-  if(on){var b=daybtns.children[i];b.classList.add('on');}
-});
-// centrar en día 1
-(function(){var all=[];dayLayers[0].places.eachLayer(function(m){all.push(m.getLatLng());});if(all.length)map.fitBounds(L.latLngBounds(all).pad(.2));})();
+function initDay(d){d.all.forEach(function(it){itemSet(it,it.mealt?false:true);});(d.meals||[]).forEach(function(me){var ch=me.options[me.chosen];(ch.parts||[ch]).forEach(function(p){itemSet(p,true);dimItem(p,false);});});}
+initDay(days[0]);
+dayEls[0].head.classList.add('open');dayEls[0].body.classList.add('open');
+syncMasters();zoomDay(days[0]);
+document.getElementById('fold').addEventListener('click',function(){document.getElementById('panel').classList.toggle('hidden');});
+
+// ================= RECORRIDO PASO A PASO (barra arriba pasos, abajo día) =================
+function isResto(it){return it&&!it.seg&&it.kind!=='stop'&&it.kind!=='hotel'&&it.kind!=='aero';}
+function buildStepsFor(day){
+  var steps=[],i=0,seq=day.seq;
+  while(i<seq.length){
+    if(seq[i].meal){var me=seq[i];steps.push({type:'opt',items:me.options,title:'🍴 '+mealLabel(me.time)+(me.time?(' · '+me.time):''),chosen:me.chosen,meal:me});i++;}
+    else if(isResto(seq[i])){var opts=[];while(i<seq.length&&isResto(seq[i])){opts.push(seq[i]);i++;}
+      steps.push({type:'opt',items:opts,title:'🍴 Comer',chosen:0});}
+    else{steps.push({type:'one',items:[seq[i]],title:seq[i].title,seg:!!seq[i].seg});i++;}
+  }
+  var lastLL=null;
+  steps.forEach(function(s){
+    if(s.type==='one'&&s.items[0].ll)lastLL=s.items[0].ll;
+    else if(s.type==='opt'&&lastLL){var best=0,bd=1e12;s.items.forEach(function(o,k){if(o.ll){var d=lastLL.distanceTo(o.ll);if(d<bd){bd=d;best=k;}}});s.chosen=best;s.fromLL=lastLL;if(s.meal)s.meal.chosen=best;}
+  });
+  return steps;
+}
+function isMob(){return document.body.classList.contains('mob');}
+var mDay=0,mStep=0;
+function dSteps(){return days[mDay].steps;}
+function mCur(){var s=dSteps()[mStep];return s.type==='one'?s.items[0]:s.items[s.chosen];}
+function openPop(it){var L2=it&&it.layer;if(!L2)return;if(L2._popup)L2.openPopup();else if(L2._pop)L2._pop.openPopup(L2._mid);} // grupo (ruta) no tiene popup propio → abre el de su línea
+function mApply(fly){
+  var day=days[mDay],s=dSteps()[mStep];
+  map.closePopup(); // cerrar el popup anterior al movernos
+  if(isMob()){ // móvil: recorrido progresivo (enciende hasta el paso, apaga lo demás)
+    day.all.forEach(function(it){itemSet(it,false);});
+    for(var k=0;k<=mStep;k++){var sk=day.steps[k];if(sk.type==='opt'){var ch=sk.items[sk.chosen];(ch.parts||[ch]).forEach(function(p){itemSet(p,true);dimItem(p,false);});}else itemSet(sk.items[0],true);}
+  } else if(s.type!=='opt'){ itemSet(mCur(),true); }
+  // comida: elegida a full, alternativas con transparencia (elementos separados: ida/lugar/regreso)
+  if(s.type==='opt'){s.items.forEach(function(o,k){(o.parts||[o]).forEach(function(p){itemSet(p,true);dimItem(p,k!==s.chosen);});});}
+  syncMasters();
+  var cur=mCur(),ll=cur.ll||(cur.layer._pts&&cur.layer._pts[0]);
+  setSel(cur); // resaltar la ruta/lugar actual
+  if(fly!==false&&ll){map.flyTo(ll,cur.seg?14:16,{duration:.5});setTimeout(function(){openPop(cur);},520);}
+  else openPop(cur); // abrir popup también en click (lugares y rutas)
+  mRender();
+}
+function mRender(){
+  var day=days[mDay],st=dSteps(),s=st[mStep];
+  var top=document.getElementById('mtop'),bot=document.getElementById('mbot');
+  var mid;
+  if(s.type==='opt'){mid='<div class="mopts">'+s.items.map(function(o,k){return '<button class="opt'+(k===s.chosen?' on':'')+'" data-k="'+k+'">'+esc(o.title)+'</button>';}).join('')+'</div>';}
+  else{mid='<div class="cur"><div class="stp">Paso '+(mStep+1)+'/'+st.length+'</div>'+(s.seg?'🚇 ':'')+esc(s.title)+'</div>';}
+  top.innerHTML='<button class="nav" id="mprev" '+(mStep<=0?'disabled':'')+'>‹</button>'+mid+'<button class="nav" id="mnext" '+(mStep>=st.length-1?'disabled':'')+'>›</button>';
+  document.getElementById('mprev').onclick=function(){if(mStep>0){mStep--;mApply();}};
+  document.getElementById('mnext').onclick=function(){if(mStep<st.length-1){mStep++;mApply();}};
+  if(s.type==='opt')top.querySelectorAll('.opt').forEach(function(b){b.onclick=function(){s.chosen=+b.getAttribute('data-k');mApply();};});
+  bot.innerHTML='<button class="nav" id="dprev" '+(mDay<=0?'disabled':'')+'>‹</button><button class="cur" id="dsel">'+esc(day.label)+' ▾</button><button class="nav" id="dnext" '+(mDay>=days.length-1?'disabled':'')+'>›</button>';
+  document.getElementById('dprev').onclick=function(){if(mDay>0)setDay(mDay-1);};
+  document.getElementById('dnext').onclick=function(){if(mDay<days.length-1)setDay(mDay+1);};
+  document.getElementById('dsel').onclick=dayPicker;
+}
+function setDay(i){mDay=i;mStep=0;if(isMob())days.forEach(function(d,k){if(k!==i)d.all.forEach(function(it){itemSet(it,false);});});mApply();}
+function findStep(it){for(var di=0;di<days.length;di++){var st=days[di].steps;for(var si=0;si<st.length;si++){var s=st[si];if(s.type==='one'&&s.items[0]===it)return [di,si,0];if(s.type==='opt'){var k=s.items.indexOf(it);if(k>=0)return [di,si,k];}}}return null;}
+function selectStep(it,fly){
+  if(it&&it.optRef){selectStep(it.optRef,fly);return;} // click en ida/regreso → selecciona su opción
+  var f=findStep(it);
+  if(!f){ // elemento suelto: enciende, resalta y vuela sin cambiar de paso
+    itemSet(it,true);setSel(it);map.closePopup();var ll=it.ll||(it.coordsLL&&L.latLng(it.coordsLL[0][0],it.coordsLL[0][1]));
+    if(fly!==false&&ll){map.flyTo(ll,15,{duration:.5});setTimeout(function(){openPop(it);},520);}else openPop(it);return;}
+  mDay=f[0];mStep=f[1];var s=dSteps()[mStep];if(s.type==='opt')s.chosen=f[2];if(isMob())days.forEach(function(d,k){if(k!==mDay)d.all.forEach(function(x){itemSet(x,false);});});mApply(fly);}
+function dayPicker(){
+  var menu=document.createElement('div');menu.className='daymenu';
+  menu.innerHTML=days.map(function(d,k){return '<button data-k="'+k+'"'+(k===mDay?' class="on"':'')+'>'+esc(d.label)+(d.travelTxt?(' · 🕐 '+esc(d.travelTxt)):'')+'</button>';}).join('');
+  document.body.appendChild(menu);
+  menu.querySelectorAll('button').forEach(function(b){b.onclick=function(e){e.stopPropagation();setDay(+b.getAttribute('data-k'));document.body.removeChild(menu);};});
+  menu.onclick=function(){document.body.removeChild(menu);};
+}
+mRender(); // barras visibles también en escritorio
+function checkMobile(){document.body.classList.toggle('mob',window.innerWidth<=820);setTimeout(function(){map.invalidateSize();},60);}
+window.addEventListener('resize',checkMobile);checkMobile();
+setTimeout(function(){map.invalidateSize();},200);
+
+// ================= DIBUJAR RUTA A MANO (clic = punto) Y COPIAR COORDENADAS =================
+var drawMode=false, drawPts=[], drawLine=L.polyline([],{color:'#e6007e',weight:4,opacity:.95,dashArray:'5 5'}), drawDots=L.layerGroup();
+var drawCtl=L.control({position:'topleft'});
+drawCtl.onAdd=function(){var b=L.DomUtil.create('div','leaflet-bar');b.innerHTML='<a href="#" id="drawtgl" title="Dibujar ruta a mano">✏️</a>';L.DomEvent.disableClickPropagation(b);
+  b.querySelector('#drawtgl').addEventListener('click',function(e){e.preventDefault();toggleDraw();});return b;};
+drawCtl.addTo(map);
+// puntos de anclaje = extremos de rutas + marcadores (para empatar continuidad)
+var SNAP=[];days.forEach(function(d){d.all.forEach(function(it){
+  if(it.ll)SNAP.push(it.ll);
+  else if(it.coordsLL&&it.coordsLL.length){var c=it.coordsLL;SNAP.push(L.latLng(c[0][0],c[0][1]));SNAP.push(L.latLng(c[c.length-1][0],c[c.length-1][1]));}
+});});
+function drawSnap(latlng){var pt=map.latLngToContainerPoint(latlng),best=null,bd=15;
+  SNAP.forEach(function(s){var d=pt.distanceTo(map.latLngToContainerPoint(s));if(d<bd){bd=d;best=s;}});return best||latlng;}
+var drawBox=document.createElement('div');drawBox.id='drawbox';drawBox.style.display='none';
+drawBox.innerHTML='<div class="dbhd">✏️ Ruta a mano — clic en orden. Los clics cerca del fin de otra ruta o de un punto se PEGAN ahí (continuidad).</div>'
+  +'<textarea id="dbtxt" readonly rows="6" placeholder="lat, lng por línea…"></textarea>'
+  +'<div class="dbcount" id="dbcount">0 puntos</div>'
+  +'<div class="dbbtns"><button id="dbundo">↶ Deshacer</button><button id="dbclear">🗑 Borrar</button><button id="dbcopy">📋 Copiar</button><button id="dbclose">✕ Cerrar</button></div>';
+document.body.appendChild(drawBox);
+function drawRender(){
+  drawLine.setLatLngs(drawPts);drawDots.clearLayers();
+  drawPts.forEach(function(p,i){var m=L.circleMarker(p,{radius:5,color:'#e6007e',fillColor:'#fff',fillOpacity:1,weight:2});m.bindTooltip(String(i+1),{permanent:true,direction:'top',className:'dbtip'});m.addTo(drawDots);});
+  document.getElementById('dbtxt').value=drawPts.map(function(p){return p.lat.toFixed(6)+', '+p.lng.toFixed(6);}).join('\n');
+  document.getElementById('dbcount').textContent=drawPts.length+' puntos';
+}
+function toggleDraw(){
+  drawMode=!drawMode;
+  var a=document.getElementById('drawtgl');if(a)a.classList.toggle('drawon',drawMode);
+  drawBox.style.display=drawMode?'block':'none';
+  map.getContainer().style.cursor=drawMode?'crosshair':'';
+  if(drawMode){drawLine.addTo(map);drawDots.addTo(map);}
+}
+map.on('click',function(e){if(drawMode){drawPts.push(drawSnap(e.latlng));drawRender();}});
+document.getElementById('dbundo').addEventListener('click',function(){drawPts.pop();drawRender();});
+document.getElementById('dbclear').addEventListener('click',function(){drawPts=[];drawRender();});
+document.getElementById('dbclose').addEventListener('click',function(){toggleDraw();});
+document.getElementById('dbcopy').addEventListener('click',function(){var t=document.getElementById('dbtxt');t.select();t.setSelectionRange(0,99999);
+  var done=function(){var b=document.getElementById('dbcopy');b.textContent='✓ Copiado';setTimeout(function(){b.textContent='📋 Copiar';},1300);};
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t.value).then(done,function(){document.execCommand('copy');done();});}
+  else{document.execCommand('copy');done();}});
 </script></body></html>"""
 
 open(SD + "/leaflet-viaje.html", "w", encoding="utf-8").write(HTML.replace("__DATA__", DATA))
