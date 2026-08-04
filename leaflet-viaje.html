@@ -204,10 +204,8 @@ DATA.days.forEach(function(d){
     var bI=-1,bD=1e12,bSide='start';
     segs.forEach(function(sg,i){var A=L.latLng(sg.coordsLL[0][0],sg.coordsLL[0][1]),da=h.ll.distanceTo(A),db=h.ll.distanceTo(sg.end);
       if(da<bD){bD=da;bI=i;bSide='start';}if(db<bD){bD=db;bI=i;bSide='end';}});
-    if(bI<0||bD>30000){ // lejos de toda ruta → aeropuerto de salida (inicio) o de regreso (fin)
-      var d0=segs.length?h.ll.distanceTo(L.latLng(segs[0].coordsLL[0][0],segs[0].coordsLL[0][1])):0;
-      var dN=segs.length?h.ll.distanceTo(segs[segs.length-1].end):1e12;(d0<=dN?farS:farE).push(h);
-    } else if(bSide==='start')(beforeSeg[bI]=beforeSeg[bI]||[]).push(h);
+    if(bI<0||bD>30000){farS.push(h);} // lejos de toda ruta → aeropuerto de salida (inicio del día)
+    else if(bSide==='start')(beforeSeg[bI]=beforeSeg[bI]||[]).push(h);
     else (afterSeg[bI]=afterSeg[bI]||[]).push(h);
   });
   var seq=[],added={};
