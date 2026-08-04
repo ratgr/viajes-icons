@@ -32,6 +32,8 @@
   .sublbl{font-size:10.5px;color:#8a8078;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:6px 10px 1px}
   .it{display:flex;gap:7px;align-items:flex-start;padding:3px 10px 3px 8px;border-left:3px solid transparent}
   .it:hover{background:#f4f7fa;border-left-color:#2c6ba0}
+  .it.sel{background:#fdeee9;border-left-color:#b23a2a;box-shadow:inset 0 0 0 1px rgba(178,58,42,.25)}
+  .selmark{filter:drop-shadow(0 0 5px rgba(178,58,42,.9)) drop-shadow(0 0 2px rgba(178,58,42,.9));z-index:900!important}
   .it.rt{padding-top:1px;padding-bottom:1px}
   .it .ck{margin:2px 0 0;flex:0 0 auto}
   .it .pin{width:12px;height:12px;border-radius:50%;flex:0 0 auto;margin-top:2px;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.15)}
@@ -54,14 +56,13 @@
   .num{background:#b23a2a;color:#fff;border-radius:50%;width:20px;height:20px;line-height:20px;text-align:center;font-size:11px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.4)}
   .dot{border-radius:50%;width:13px;height:13px;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4)}
   .fold{position:absolute;z-index:1001;top:10px;right:10px;background:#fff;border:none;border-radius:8px;width:36px;height:36px;box-shadow:0 2px 8px rgba(0,0,0,.25);cursor:pointer;font-size:17px;display:none}
-  @media(min-width:920px){
+  @media(min-width:821px){
     body{overflow:hidden}
     .panel{position:absolute;top:0;left:0;height:100%;max-height:100%;width:380px;border-radius:0;box-shadow:2px 0 12px rgba(0,0,0,.12)}
     #map{left:380px}
     .it .nm,.it .ds{white-space:normal}
     .mbar{left:392px;right:14px}.mbar.mtop{top:12px}.mbar.mbot{bottom:12px}
   }
-  @media(min-width:601px) and (max-width:919px){.panel{width:84vw;max-width:320px}.fold{display:block}.panel.hidden{display:none}}
   /* modo móvil: barras de recorrido paso a paso */
   .mbar{position:absolute;left:8px;right:8px;z-index:1002;display:flex;gap:6px;align-items:center;pointer-events:none}
   .mbar>*{pointer-events:auto}
@@ -80,6 +81,8 @@
   body.mob .panel{display:none}
   body.mob .fold{display:none}
   body.mob .mbar{display:flex}
+  /* que las barras no tapen los controles del mapa (zoom, capas, atribución) */
+  .leaflet-top{top:58px}.leaflet-bottom{bottom:58px}
 </style></head><body>
 <div id="map"></div>
 <button class="fold" id="fold">☰</button>
@@ -164,7 +167,7 @@ DATA.days.forEach(function(d){
     (p.kind==='hotel'||p.kind==='aero')?hoteles.push(it):restos.push(it);
   });
   var segs=d.segments.map(function(s){var e=segEnds(s.name),cd=s.coords;return {seg:true,layer:segLayer(s),
-    name:s.name,title:(e?(e.a+' → '+e.b):s.name),color:s.color,durTxt:s.durTxt,distTxt:s.distTxt,dur:s.dur||0,mode:s.mode,
+    name:s.name,title:(e?(e.a+' → '+e.b):s.name),color:s.color,durTxt:s.durTxt,distTxt:s.distTxt,dur:s.dur||0,mode:s.mode,coordsLL:cd,
     ord:parseInt((/·(\d+)/.exec(s.name)||[0,'999'])[1],10),end:L.latLng(cd[cd.length-1][0],cd[cd.length-1][1])};});
   segs.sort(function(a,b){return a.ord-b.ord;});
   // cada parada va TRAS el tramo que llega a ella (fin del tramo más cercano)
@@ -204,7 +207,23 @@ function mkRow(it){
   row.insertAdjacentHTML('beforeend',vis+'<div class="bd"><div class="nm">'+esc(it.title)+'</div>'+(ds?'<div class="ds">'+esc(ds)+'</div>':'')+'</div>'+tm);
   cb.addEventListener('change',function(){itemSet(it,cb.checked);syncMasters();});
   row.querySelector('.bd').addEventListener('click',function(){volar(it);});
+  it._row=row;
   return row;
+}
+// ---- resaltar el seleccionado (halo en ruta, glow en lugar, fila marcada) ----
+var selGlow=L.polyline([],{weight:13,opacity:.35,lineCap:'round',lineJoin:'round'});
+var selItem=null,selRow=null;
+function clearSel(){
+  if(selRow){selRow.classList.remove('sel');selRow=null;}
+  if(map.hasLayer(selGlow))map.removeLayer(selGlow);
+  if(selItem&&!selItem.seg&&selItem.layer&&selItem.layer._icon)selItem.layer._icon.classList.remove('selmark');
+  selItem=null;
+}
+function setSel(it){
+  clearSel();selItem=it;selRow=it._row||null;
+  if(selRow){selRow.classList.add('sel');if(selRow.scrollIntoView)selRow.scrollIntoView({block:'nearest'});}
+  if(it.seg){if(it.coordsLL){selGlow.setLatLngs(it.coordsLL).setStyle({color:it.color});selGlow.addTo(map).bringToBack();}}
+  else if(it.layer&&it.layer._icon){it.layer._icon.classList.add('selmark');}
 }
 function mkDay(day,open){
   var g=document.createElement('div');g.className='dayg';
@@ -262,12 +281,14 @@ function dSteps(){return days[mDay].steps;}
 function mCur(){var s=dSteps()[mStep];return s.type==='one'?s.items[0]:s.items[s.chosen];}
 function mApply(fly){
   var day=days[mDay];
+  map.closePopup(); // cerrar el popup anterior al movernos
   if(isMob()){ // móvil: recorrido progresivo (enciende hasta el paso, apaga lo demás)
     day.all.forEach(function(it){itemSet(it,false);});
     for(var k=0;k<=mStep;k++){var s=day.steps[k];itemSet(s.type==='one'?s.items[0]:s.items[s.chosen],true);}
   } else { itemSet(mCur(),true); }
   syncMasters();
   var cur=mCur(),ll=cur.ll||(cur.layer._pts&&cur.layer._pts[0]);
+  setSel(cur); // resaltar la ruta/lugar actual
   if(fly!==false&&ll)map.flyTo(ll,cur.seg?14:16,{duration:.5});
   if(fly!==false)setTimeout(function(){cur.layer.openPopup&&cur.layer.openPopup();},520);
   mRender();
@@ -298,7 +319,7 @@ function dayPicker(){
   menu.onclick=function(){document.body.removeChild(menu);};
 }
 mRender(); // barras visibles también en escritorio
-function checkMobile(){document.body.classList.toggle('mob',window.innerWidth<=700);setTimeout(function(){map.invalidateSize();},60);}
+function checkMobile(){document.body.classList.toggle('mob',window.innerWidth<=820);setTimeout(function(){map.invalidateSize();},60);}
 window.addEventListener('resize',checkMobile);checkMobile();
 setTimeout(function(){map.invalidateSize();},200);
 </script></body></html>
