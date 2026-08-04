@@ -169,7 +169,7 @@ function segLayer(seg){
   var parts=[hit,pl,dec];
   if(seg.mode!=='walk'){for(var i=1;i<seg.coords.length-1;i++){parts.push(L.circleMarker(seg.coords[i],{radius:3.5,color:seg.color,weight:1.5,fillColor:'#fff',fillOpacity:1,interactive:false}));}}
   parts.push(start,end);
-  var g=L.layerGroup(parts);g._pts=[L.latLng(a[0],a[1]),L.latLng(b[0],b[1])];g._pop=pl;g._mid=pl.getBounds().getCenter();
+  var g=L.layerGroup(parts);g._pts=[L.latLng(a[0],a[1]),L.latLng(b[0],b[1])];g._pop=pl;g._hit=hit;g._mid=pl.getBounds().getCenter();
   return g;
 }
 
@@ -194,6 +194,7 @@ DATA.days.forEach(function(d){
     name:s.name,title:(e?(e.a+' → '+e.b):s.name),color:s.color,durTxt:s.durTxt,distTxt:s.distTxt,dur:s.dur||0,mode:s.mode,coordsLL:cd,
     ord:parseInt((/·(\d+)/.exec(s.name)||[0,'999'])[1],10),end:L.latLng(cd[cd.length-1][0],cd[cd.length-1][1])};});
   segs.sort(function(a,b){return a.ord-b.ord;});
+  segs.forEach(function(it){[it.layer._hit,it.layer._pop].forEach(function(ln){if(ln)ln.on('click',function(){selectStep(it,false);});});}); // clic en ruta = seleccionarla
   // cada parada va TRAS el tramo que llega a ella (fin del tramo más cercano)
   stops.forEach(function(st){var best=-1,bd=1e12;segs.forEach(function(sg,i){var dd=st.ll.distanceTo(sg.end);if(dd<bd){bd=dd;best=i;}});st.arr=best;});
   var arrMap={};stops.forEach(function(st){(arrMap[st.arr]=arrMap[st.arr]||[]).push(st);});
@@ -246,12 +247,12 @@ DATA.days.forEach(function(d){
       if(fromLL){var mi=fromLL.distanceTo(o.ll),pl=L.polyline([fromLL,o.ll],{color:'#b23a2a',weight:3,opacity:.9,dashArray:'3 7'});
         pl.bindPopup('<div class="lp">🚶 Ida a <b>'+esc(o.title)+'</b> · '+wkm(mi)+' · ~'+wmin(mi)+' min</div>');
         var ida={seg:true,layer:pl,optRef:o,title:'ida → '+o.title,color:'#b23a2a',mode:'walk',durTxt:'~'+wmin(mi)+' min',distTxt:wkm(mi),mealt:me.time,coordsLL:[[fromLL.lat,fromLL.lng],[o.ll.lat,o.ll.lng]]};
-        o.ida=ida;o.parts.push(ida);mroutes.push(ida);}
+        o.ida=ida;o.parts.push(ida);mroutes.push(ida);pl.on('click',function(){selectStep(ida,false);});}
       o.parts.push(o);
       if(toLL){var mv=o.ll.distanceTo(toLL),pl2=L.polyline([o.ll,toLL],{color:'#c8791f',weight:3,opacity:.9,dashArray:'1 6'});
         pl2.bindPopup('<div class="lp">🚶 Regreso al itinerario · '+wkm(mv)+' · ~'+wmin(mv)+' min</div>');
         var reg={seg:true,layer:pl2,optRef:o,title:'regreso → itinerario',color:'#c8791f',mode:'walk',durTxt:'~'+wmin(mv)+' min',distTxt:wkm(mv),mealt:me.time,coordsLL:[[o.ll.lat,o.ll.lng],[toLL.lat,toLL.lng]]};
-        o.reg=reg;o.parts.push(reg);mroutes.push(reg);}
+        o.reg=reg;o.parts.push(reg);mroutes.push(reg);pl2.on('click',function(){selectStep(reg,false);});}
     });
     seq.splice(pos,0,me);
   });
