@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#b23a2a">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="https://raw.githubusercontent.com/ratgr/viajes-icons/main/apple-touch-icon.png">
+<link rel="icon" href="https://raw.githubusercontent.com/ratgr/viajes-icons/main/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Japón 2026">
+</head>
+<body>
+<title>Viajes RTR</title>
+<div style="font-family:Georgia,serif;background:#faf7f1;color:#241f1c;display:grid;place-items:center;min-height:100vh;margin:0;text-align:center">
+<div><h1>Viajes</h1>
+<a style="display:block;font-size:26px;color:#b23a2a;margin:18px 0;text-decoration:none" href="japon.html">⛩️ Japón en familia — oct 2026</a>
+<p style="color:#6e6459">páginas vivas · funcionan sin internet una vez abiertas</p></div></div>
+
+<script>window.__APPV="17858634";</script>
+<script>
+if ('serviceWorker' in navigator) {
+  var ahorroDatos = false;
+  try { ahorroDatos = localStorage.getItem('fotosNet') === '0'; } catch (e) {}
+  navigator.serviceWorker.register('sw.js', { updateViaCache: ahorroDatos ? 'all' : 'none' });
+  function forzarUpdate() {
+    var jobs = [navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); })];
+    if ('caches' in window) jobs.push(caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return (k === 'viajes-fotos' || k === 'viajes-cfg') ? null : caches.delete(k); })); }));
+    Promise.all(jobs).catch(function () {}).then(function () { location.replace(location.origin + location.pathname + '?u=' + Date.now()); });
+  }
+  window.__forzarUpdate = forzarUpdate;
+  function aviso() {
+    if (document.getElementById('sw-upd')) return;
+    var b = document.createElement('div'); b.id = 'sw-upd';
+    b.textContent = '\uD83D\uDD04 Nueva versi\u00F3n \u2014 toca para actualizar';
+    b.setAttribute('style', 'position:fixed;left:12px;right:12px;bottom:12px;z-index:80;background:#b23a2a;color:#fff;font:700 14px system-ui,sans-serif;padding:12px 16px;padding-bottom:max(12px,env(safe-area-inset-bottom));border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.35);text-align:center;cursor:pointer');
+    b.onclick = function () { b.textContent = 'Actualizando\u2026'; forzarUpdate(); };
+    document.body.appendChild(b);
+  }
+  if (!ahorroDatos) {
+    try {
+      fetch('sw.js?b=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.text(); }).then(function (t) {
+        var m = t.match(/viajes-(\d+)/);
+        if (m && window.__APPV && m[1] !== window.__APPV) aviso();
+      }).catch(function () {});
+    } catch (e) {}
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "Viajes RTR — Japón 2026",
+  "short_name": "Japón 2026",
+  "description": "El plan familiar: itinerario, comida, presupuesto y mapa",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#faf7f1",
+  "theme_color": "#b23a2a",
+  "icons": [
+    { "src": "https://raw.githubusercontent.com/ratgr/viajes-icons/main/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "https://raw.githubusercontent.com/ratgr/viajes-icons/main/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
