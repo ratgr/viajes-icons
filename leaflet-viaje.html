@@ -224,7 +224,7 @@ DATA.days.forEach(function(d){
   var mroutes=[]; // ida/regreso como elementos separados
   meals.forEach(function(me){
     // insertar la comida donde ESTAMOS MÁS CERCA de sus opciones (evita rutas larguísimas "teletransporte")
-    var clat=0,clng=0;me.options.forEach(function(o){clat+=o.lat;clng+=o.lng;});clat/=me.options.length;clng/=me.options.length;
+    var clat=0,clng=0;me.options.forEach(function(o){clat+=o.ll.lat;clng+=o.ll.lng;});clat/=me.options.length;clng/=me.options.length;
     var cLL=L.latLng(clat,clng),pos=seq.length,bd=1e15;
     for(var ci=0;ci<seq.length;ci++){var cit=seq[ci];if(cit.meal||cit.seg||!cit.ll)continue;var cd=cit.ll.distanceTo(cLL);if(cd<bd){bd=cd;pos=ci+1;}}
     var fromLL=null;for(var j=pos-1;j>=0;j--){var pv=seq[j];if(pv&&!pv.meal&&pv.ll){fromLL=pv.ll;break;}}
