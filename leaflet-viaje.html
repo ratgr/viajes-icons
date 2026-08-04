@@ -59,10 +59,12 @@
     .panel{position:absolute;top:0;left:0;height:100%;max-height:100%;width:380px;border-radius:0;box-shadow:2px 0 12px rgba(0,0,0,.12)}
     #map{left:380px}
     .it .nm,.it .ds{white-space:normal}
+    .mbar{left:392px;right:14px}.mbar.mtop{top:12px}.mbar.mbot{bottom:12px}
   }
   @media(min-width:601px) and (max-width:919px){.panel{width:84vw;max-width:320px}.fold{display:block}.panel.hidden{display:none}}
   /* modo móvil: barras de recorrido paso a paso */
-  .mbar{position:absolute;left:8px;right:8px;z-index:1002;display:none;gap:6px;align-items:center}
+  .mbar{position:absolute;left:8px;right:8px;z-index:1002;display:flex;gap:6px;align-items:center;pointer-events:none}
+  .mbar>*{pointer-events:auto}
   .mbar.mtop{top:8px}.mbar.mbot{bottom:8px}
   .mbar .nav{width:40px;height:40px;border-radius:10px;border:none;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.28);font-size:22px;line-height:1;cursor:pointer;flex:0 0 auto}
   .mbar .nav:disabled{opacity:.4}
@@ -124,6 +126,7 @@ function placeMarker(it){
   var html='<div class="lp"><div class="tt"><a href="'+APP+'" target="_blank" title="Ver el plan">'+esc(it.title)+'</a>'+metaHtml+'</div>'+
     img+desc+hist+(it.maps?'<a class="gm" href="'+it.maps+'" target="_blank">Abrir en Google Maps ↗</a>':'')+'</div>';
   m.bindPopup(html,{maxWidth:285});
+  m.on('click',function(){if(typeof selectStep==='function')selectStep(it,false);});
   return m;
 }
 function segLayer(seg){
@@ -160,30 +163,30 @@ DATA.days.forEach(function(d){
       maps:p.maps,color:pColor(p.kind,p.tier),ll:L.latLng(p.lat,p.lng)};
     (p.kind==='hotel'||p.kind==='aero')?hoteles.push(it):restos.push(it);
   });
-  var segs=d.segments.map(function(s){var e=segEnds(s.name);return {seg:true,layer:segLayer(s),
-    title:(e?(e.a+' → '+e.b):s.name),color:s.color,durTxt:s.durTxt,distTxt:s.distTxt,dur:s.dur||0,
-    mode:s.mode,target:segTarget(s.name)};});
-  // sumar duración de rutas que llevan a cada parada (para "· ~X min")
-  segs.forEach(function(sg){var st=byNorm[sg.target];if(st){st.inc+=sg.dur;}});
-  stops.forEach(function(st){st.incTxt=st.inc?fmtMin(st.inc):'';});
-  // marcadores
+  var segs=d.segments.map(function(s){var e=segEnds(s.name),cd=s.coords;return {seg:true,layer:segLayer(s),
+    name:s.name,title:(e?(e.a+' → '+e.b):s.name),color:s.color,durTxt:s.durTxt,distTxt:s.distTxt,dur:s.dur||0,mode:s.mode,
+    ord:parseInt((/·(\d+)/.exec(s.name)||[0,'999'])[1],10),end:L.latLng(cd[cd.length-1][0],cd[cd.length-1][1])};});
+  segs.sort(function(a,b){return a.ord-b.ord;});
+  // cada parada va TRAS el tramo que llega a ella (fin del tramo más cercano)
+  stops.forEach(function(st){var best=-1,bd=1e12;segs.forEach(function(sg,i){var dd=st.ll.distanceTo(sg.end);if(dd<bd){bd=dd;best=i;}});st.arr=best;});
+  var arrMap={};stops.forEach(function(st){(arrMap[st.arr]=arrMap[st.arr]||[]).push(st);});
+  // tiempo de traslado acumulado hasta cada parada (· ~X min)
+  var acc=0;segs.forEach(function(sg,i){acc+=sg.dur;if(arrMap[i]){arrMap[i].forEach(function(st){st.inc=acc;st.incTxt=fmtMin(acc);});acc=0;}});
+  // marcadores (tras calcular inc, para el meta del popup)
   stops.concat(hoteles,restos).forEach(function(it){it.layer=placeMarker(it);});
-  // secuencia intercalada: hoteles → (rutas⇒parada, parada)... → rutas sobrantes → restaurantes
-  var seq=[],usados={};
-  hoteles.forEach(function(h){seq.push(h);});
-  stops.forEach(function(st){
-    segs.forEach(function(sg,i){if(sg.target===norm(st.title)&&!usados[i]){usados[i]=1;seq.push(sg);}});
-    seq.push(st);
-  });
-  segs.forEach(function(sg,i){if(!usados[i]){usados[i]=1;seq.push(sg);}});
-  days.push({key:d.key,label:d.label,travelTxt:d.travelTxt,seq:seq,restos:restos,
-    all:stops.concat(hoteles,restos,segs)});
+  // secuencia intercalada: hotel → (tramos… parada)… → restaurantes
+  var seq=[],added={};hoteles.forEach(function(h){seq.push(h);});
+  segs.forEach(function(sg,i){seq.push(sg);if(arrMap[i])arrMap[i].forEach(function(st){seq.push(st);added[st.num]=1;});});
+  stops.forEach(function(st){if(!added[st.num])seq.push(st);});
+  restos.forEach(function(r){seq.push(r);});
+  days.push({key:d.key,label:d.label,travelTxt:d.travelTxt,seq:seq,restos:restos,all:stops.concat(hoteles,restos,segs)});
 });
+days.forEach(function(d){d.steps=buildStepsFor(d);});
 
 function itemSet(it,on){if(on){if(!map.hasLayer(it.layer))map.addLayer(it.layer);}else{if(map.hasLayer(it.layer))map.removeLayer(it.layer);}if(it.cb)it.cb.checked=on;}
 function dayPts(day){var pts=[];day.all.forEach(function(it){if(it.layer.getLatLng)pts.push(it.layer.getLatLng());else if(it.layer._pts)pts.push.apply(pts,it.layer._pts);});return pts;}
 function zoomDay(day){var pts=dayPts(day);if(pts.length)map.fitBounds(L.latLngBounds(pts).pad(.15));}
-function volar(it){itemSet(it,true);syncMasters();var ll=it.ll||(it.layer._pts&&it.layer._pts[0]);if(ll){map.flyTo(ll,it.seg?15:16,{duration:.6});setTimeout(function(){it.layer.openPopup&&it.layer.openPopup();},650);}}
+function volar(it){selectStep(it,true);}
 
 var tree=document.getElementById('tree'),daybtns=document.getElementById('daybtns'),dayEls=[];
 function mkRow(it){
@@ -237,16 +240,15 @@ dayEls[0].head.classList.add('open');dayEls[0].body.classList.add('open');
 syncMasters();zoomDay(days[0]);
 document.getElementById('fold').addEventListener('click',function(){document.getElementById('panel').classList.toggle('hidden');});
 
-// ================= MÓVIL: recorrido paso a paso =================
+// ================= RECORRIDO PASO A PASO (barra arriba pasos, abajo día) =================
 function isResto(it){return it&&!it.seg&&it.kind!=='stop'&&it.kind!=='hotel'&&it.kind!=='aero';}
-function buildSteps(day){
+function buildStepsFor(day){
   var steps=[],i=0,seq=day.seq;
   while(i<seq.length){
     if(isResto(seq[i])){var opts=[];while(i<seq.length&&isResto(seq[i])){opts.push(seq[i]);i++;}
       steps.push({type:'opt',items:opts,title:'🍴 Comer',chosen:0});}
     else{steps.push({type:'one',items:[seq[i]],title:seq[i].title,seg:!!seq[i].seg});i++;}
   }
-  // opción por default = la más cercana al último punto conocido
   var lastLL=null;
   steps.forEach(function(s){
     if(s.type==='one'&&s.items[0].ll)lastLL=s.items[0].ll;
@@ -254,34 +256,40 @@ function buildSteps(day){
   });
   return steps;
 }
-var mDay=0,mStep=0,mSteps=[];
-function mCur(){var s=mSteps[mStep];return s.type==='one'?s.items[0]:s.items[s.chosen];}
-function mApply(){
+function isMob(){return document.body.classList.contains('mob');}
+var mDay=0,mStep=0;
+function dSteps(){return days[mDay].steps;}
+function mCur(){var s=dSteps()[mStep];return s.type==='one'?s.items[0]:s.items[s.chosen];}
+function mApply(fly){
   var day=days[mDay];
-  day.all.forEach(function(it){itemSet(it,false);});
-  for(var k=0;k<=mStep&&k<mSteps.length;k++){var s=mSteps[k];itemSet(s.type==='one'?s.items[0]:s.items[s.chosen],true);}
+  if(isMob()){ // móvil: recorrido progresivo (enciende hasta el paso, apaga lo demás)
+    day.all.forEach(function(it){itemSet(it,false);});
+    for(var k=0;k<=mStep;k++){var s=day.steps[k];itemSet(s.type==='one'?s.items[0]:s.items[s.chosen],true);}
+  } else { itemSet(mCur(),true); }
   syncMasters();
   var cur=mCur(),ll=cur.ll||(cur.layer._pts&&cur.layer._pts[0]);
-  if(ll)map.flyTo(ll,cur.seg?14:16,{duration:.5});
-  setTimeout(function(){cur.layer.openPopup&&cur.layer.openPopup();},520);
+  if(fly!==false&&ll)map.flyTo(ll,cur.seg?14:16,{duration:.5});
+  if(fly!==false)setTimeout(function(){cur.layer.openPopup&&cur.layer.openPopup();},520);
   mRender();
 }
 function mRender(){
-  var day=days[mDay],s=mSteps[mStep];
+  var day=days[mDay],st=dSteps(),s=st[mStep];
   var top=document.getElementById('mtop'),bot=document.getElementById('mbot');
   var mid;
   if(s.type==='opt'){mid='<div class="mopts">'+s.items.map(function(o,k){return '<button class="opt'+(k===s.chosen?' on':'')+'" data-k="'+k+'">'+esc(o.title)+'</button>';}).join('')+'</div>';}
-  else{mid='<div class="cur"><div class="stp">Paso '+(mStep+1)+'/'+mSteps.length+'</div>'+(s.seg?'🚇 ':'')+esc(s.title)+'</div>';}
-  top.innerHTML='<button class="nav" id="mprev" '+(mStep<=0?'disabled':'')+'>‹</button>'+mid+'<button class="nav" id="mnext" '+(mStep>=mSteps.length-1?'disabled':'')+'>›</button>';
+  else{mid='<div class="cur"><div class="stp">Paso '+(mStep+1)+'/'+st.length+'</div>'+(s.seg?'🚇 ':'')+esc(s.title)+'</div>';}
+  top.innerHTML='<button class="nav" id="mprev" '+(mStep<=0?'disabled':'')+'>‹</button>'+mid+'<button class="nav" id="mnext" '+(mStep>=st.length-1?'disabled':'')+'>›</button>';
   document.getElementById('mprev').onclick=function(){if(mStep>0){mStep--;mApply();}};
-  document.getElementById('mnext').onclick=function(){if(mStep<mSteps.length-1){mStep++;mApply();}};
+  document.getElementById('mnext').onclick=function(){if(mStep<st.length-1){mStep++;mApply();}};
   if(s.type==='opt')top.querySelectorAll('.opt').forEach(function(b){b.onclick=function(){s.chosen=+b.getAttribute('data-k');mApply();};});
   bot.innerHTML='<button class="nav" id="dprev" '+(mDay<=0?'disabled':'')+'>‹</button><button class="cur" id="dsel">'+esc(day.label)+' ▾</button><button class="nav" id="dnext" '+(mDay>=days.length-1?'disabled':'')+'>›</button>';
   document.getElementById('dprev').onclick=function(){if(mDay>0)setDay(mDay-1);};
   document.getElementById('dnext').onclick=function(){if(mDay<days.length-1)setDay(mDay+1);};
   document.getElementById('dsel').onclick=dayPicker;
 }
-function setDay(i){mDay=i;mStep=0;mSteps=buildSteps(days[i]);days.forEach(function(d,k){if(k!==i)d.all.forEach(function(it){itemSet(it,false);});});mApply();}
+function setDay(i){mDay=i;mStep=0;if(isMob())days.forEach(function(d,k){if(k!==i)d.all.forEach(function(it){itemSet(it,false);});});mApply();}
+function findStep(it){for(var di=0;di<days.length;di++){var st=days[di].steps;for(var si=0;si<st.length;si++){var s=st[si];if(s.type==='one'&&s.items[0]===it)return [di,si,0];if(s.type==='opt'){var k=s.items.indexOf(it);if(k>=0)return [di,si,k];}}}return null;}
+function selectStep(it,fly){var f=findStep(it);if(!f)return;mDay=f[0];mStep=f[1];var s=dSteps()[mStep];if(s.type==='opt')s.chosen=f[2];if(isMob())days.forEach(function(d,k){if(k!==mDay)d.all.forEach(function(x){itemSet(x,false);});});mApply(fly);}
 function dayPicker(){
   var menu=document.createElement('div');menu.className='daymenu';
   menu.innerHTML=days.map(function(d,k){return '<button data-k="'+k+'"'+(k===mDay?' class="on"':'')+'>'+esc(d.label)+(d.travelTxt?(' · 🕐 '+esc(d.travelTxt)):'')+'</button>';}).join('');
@@ -289,7 +297,8 @@ function dayPicker(){
   menu.querySelectorAll('button').forEach(function(b){b.onclick=function(e){e.stopPropagation();setDay(+b.getAttribute('data-k'));document.body.removeChild(menu);};});
   menu.onclick=function(){document.body.removeChild(menu);};
 }
-function checkMobile(){var m=window.innerWidth<=700;document.body.classList.toggle('mob',m);if(m&&!mSteps.length)setDay(0);setTimeout(function(){map.invalidateSize();},60);}
+mRender(); // barras visibles también en escritorio
+function checkMobile(){document.body.classList.toggle('mob',window.innerWidth<=700);setTimeout(function(){map.invalidateSize();},60);}
 window.addEventListener('resize',checkMobile);checkMobile();
 setTimeout(function(){map.invalidateSize();},200);
 </script></body></html>
