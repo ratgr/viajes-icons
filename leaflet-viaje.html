@@ -75,6 +75,9 @@
   .mealh .mcar{margin-left:auto;color:#b23a2a;font-size:11px;transition:transform .15s}
   .mealh.closed .mcar{transform:rotate(-90deg)}
   .mealc.closed{display:none}
+  .optgrp{margin:2px 0 7px;border-left:2px solid #efe6e0;padding-left:3px}
+  .dimmed{opacity:.4} /* marcador de alternativa (no elegida) */
+  .it.dimrow .nm,.it.dimrow .ds{opacity:.55}
   .mbar .nav{width:40px;height:40px;border-radius:10px;border:none;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.28);font-size:22px;line-height:1;cursor:pointer;flex:0 0 auto}
   .mbar .nav:disabled{opacity:.4}
   .mbar .cur{flex:1;background:#fff;border:none;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.28);padding:9px 10px;font-size:13px;font-weight:700;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -195,34 +198,60 @@ DATA.days.forEach(function(d){
   var opall=[];meals.forEach(function(me){opall=opall.concat(me.options);});
   stops.concat(hoteles,restos,opall).forEach(function(it){it.layer=placeMarker(it);});
   // secuencia intercalada: hotel → (tramos… parada)… → comidas por hora → restaurantes sueltos
-  var seq=[],added={};hoteles.forEach(function(h){seq.push(h);});
-  segs.forEach(function(sg,i){seq.push(sg);if(arrMap[i])arrMap[i].forEach(function(st){seq.push(st);added[st.num]=1;});});
+  // ubicar hoteles/aeropuertos por su conexión a las rutas (no todos al inicio)
+  var farS=[],farE=[],beforeSeg={},afterSeg={};
+  hoteles.forEach(function(h){
+    var bI=-1,bD=1e12,bSide='start';
+    segs.forEach(function(sg,i){var A=L.latLng(sg.coordsLL[0][0],sg.coordsLL[0][1]),da=h.ll.distanceTo(A),db=h.ll.distanceTo(sg.end);
+      if(da<bD){bD=da;bI=i;bSide='start';}if(db<bD){bD=db;bI=i;bSide='end';}});
+    if(bI<0||bD>30000){ // lejos de toda ruta → aeropuerto de salida (inicio) o de regreso (fin)
+      var d0=segs.length?h.ll.distanceTo(L.latLng(segs[0].coordsLL[0][0],segs[0].coordsLL[0][1])):0;
+      var dN=segs.length?h.ll.distanceTo(segs[segs.length-1].end):1e12;(d0<=dN?farS:farE).push(h);
+    } else if(bSide==='start')(beforeSeg[bI]=beforeSeg[bI]||[]).push(h);
+    else (afterSeg[bI]=afterSeg[bI]||[]).push(h);
+  });
+  var seq=[],added={};
+  farS.forEach(function(h){seq.push(h);}); // aeropuerto de salida primero
+  segs.forEach(function(sg,i){
+    (beforeSeg[i]||[]).forEach(function(h){seq.push(h);}); // origen del tramo (aeropuerto de llegada)
+    seq.push(sg);
+    if(arrMap[i])arrMap[i].forEach(function(st){seq.push(st);added[st.num]=1;});
+    (afterSeg[i]||[]).forEach(function(h){seq.push(h);}); // destino del tramo (hotel al llegar)
+  });
   stops.forEach(function(st){if(!added[st.num])seq.push(st);});
   function wkm(m){return m<1000?(Math.round(m/10)*10+' m'):((m/1000).toFixed(1)+' km');}
   function wmin(m){return Math.max(5,Math.round(m/76.7/5)*5);}
+  var mroutes=[]; // ida/regreso como elementos separados
   meals.forEach(function(me){
     var pos=seq.length;for(var i2=0;i2<seq.length;i2++){var it=seq[i2];if(it.time&&me.time&&it.time>me.time){pos=i2;break;}}
     var fromLL=null;for(var j=pos-1;j>=0;j--){var pv=seq[j];if(pv&&!pv.meal&&pv.ll){fromLL=pv.ll;break;}}
     var toLL=null;for(var j2=pos;j2<seq.length;j2++){var nx=seq[j2];if(nx&&!nx.meal&&nx.ll){toLL=nx.ll;break;}}
     me.fromLL=fromLL;me.toLL=toLL;
     me.options.forEach(function(o){
-      var parts=[];
-      if(fromLL){o.route=L.polyline([fromLL,o.ll],{color:'#b23a2a',weight:3,opacity:.9,dashArray:'3 7'}); // ida
-        var mi=fromLL.distanceTo(o.ll);o.rmin=wmin(mi);parts.push('ida '+wkm(mi)+' ~'+o.rmin+' min');}
-      if(toLL){o.route2=L.polyline([o.ll,toLL],{color:'#c8791f',weight:3,opacity:.9,dashArray:'1 6'}); // regreso
-        var mv=o.ll.distanceTo(toLL);o.rmin2=wmin(mv);parts.push('vuelta '+wkm(mv)+' ~'+o.rmin2+' min');}
-      o.rtxt=parts.length?('🚶 '+parts.join(' · ')):'';
+      o.parts=[];
+      if(fromLL){var mi=fromLL.distanceTo(o.ll),pl=L.polyline([fromLL,o.ll],{color:'#b23a2a',weight:3,opacity:.9,dashArray:'3 7'});
+        pl.bindPopup('<div class="lp">🚶 Ida a <b>'+esc(o.title)+'</b> · '+wkm(mi)+' · ~'+wmin(mi)+' min</div>');
+        var ida={seg:true,layer:pl,optRef:o,title:'ida → '+o.title,color:'#b23a2a',mode:'walk',durTxt:'~'+wmin(mi)+' min',distTxt:wkm(mi),mealt:me.time,coordsLL:[[fromLL.lat,fromLL.lng],[o.ll.lat,o.ll.lng]]};
+        o.ida=ida;o.parts.push(ida);mroutes.push(ida);}
+      o.parts.push(o);
+      if(toLL){var mv=o.ll.distanceTo(toLL),pl2=L.polyline([o.ll,toLL],{color:'#c8791f',weight:3,opacity:.9,dashArray:'1 6'});
+        pl2.bindPopup('<div class="lp">🚶 Regreso al itinerario · '+wkm(mv)+' · ~'+wmin(mv)+' min</div>');
+        var reg={seg:true,layer:pl2,optRef:o,title:'regreso → itinerario',color:'#c8791f',mode:'walk',durTxt:'~'+wmin(mv)+' min',distTxt:wkm(mv),mealt:me.time,coordsLL:[[o.ll.lat,o.ll.lng],[toLL.lat,toLL.lng]]};
+        o.reg=reg;o.parts.push(reg);mroutes.push(reg);}
     });
     seq.splice(pos,0,me);
   });
   restos.forEach(function(r){seq.push(r);});
-  days.push({key:d.key,label:d.label,travelTxt:d.travelTxt,seq:seq,restos:restos,meals:meals,all:stops.concat(hoteles,restos,segs,opall)});
+  farE.forEach(function(h){seq.push(h);}); // aeropuerto de regreso al final
+  days.push({key:d.key,label:d.label,travelTxt:d.travelTxt,seq:seq,restos:restos,meals:meals,all:stops.concat(hoteles,restos,segs,opall,mroutes)});
 });
 days.forEach(function(d){d.steps=buildStepsFor(d);});
 
-function itemSet(it,on){if(on){if(!map.hasLayer(it.layer))map.addLayer(it.layer);}else{if(map.hasLayer(it.layer))map.removeLayer(it.layer);}
-  [it.route,it.route2].forEach(function(r){if(r){if(on){if(!map.hasLayer(r))map.addLayer(r);}else{if(map.hasLayer(r))map.removeLayer(r);}}}); // ida+regreso van con su lugar
-  if(it.cb)it.cb.checked=on;}
+function itemSet(it,on){if(on){if(!map.hasLayer(it.layer))map.addLayer(it.layer);}else{if(map.hasLayer(it.layer))map.removeLayer(it.layer);}if(it.cb)it.cb.checked=on;}
+function dimItem(it,dim){ // alternativas de comida con transparencia
+  if(it.seg&&it.layer&&it.layer.setStyle)it.layer.setStyle({opacity:dim?.3:.9});
+  else if(it.layer&&it.layer._icon)it.layer._icon.classList.toggle('dimmed',dim);
+  if(it._row)it._row.classList.toggle('dimrow',dim);}
 function dayPts(day){var pts=[];day.all.forEach(function(it){if(it.layer.getLatLng)pts.push(it.layer.getLatLng());else if(it.layer._pts)pts.push.apply(pts,it.layer._pts);});return pts;}
 function zoomDay(day){var pts=dayPts(day);if(pts.length)map.fitBounds(L.latLngBounds(pts).pad(.15));}
 function volar(it){selectStep(it,true);}
@@ -271,7 +300,8 @@ function mkDay(day,open){
     if(it.meal){
       var mh=document.createElement('div');mh.className='sublbl mealh';
       mh.innerHTML='🍴 Comer'+(it.time?(' · '+esc(it.time)):'')+' — elige <span class="mcar">▼</span>';
-      var mc=document.createElement('div');mc.className='mealc';it.options.forEach(function(o){mc.appendChild(mkRow(o));});
+      var mc=document.createElement('div');mc.className='mealc';
+      it.options.forEach(function(o){var og=document.createElement('div');og.className='optgrp';(o.parts||[o]).forEach(function(p){og.appendChild(mkRow(p));});mc.appendChild(og);});
       mh.addEventListener('click',function(){mh.classList.toggle('closed');mc.classList.toggle('closed');});
       body.appendChild(mh);body.appendChild(mc);
     } else body.appendChild(mkRow(it));
@@ -298,7 +328,7 @@ var noneb=document.createElement('button');noneb.className='nonebtn';noneb.textC
 noneb.addEventListener('click',function(){days.forEach(function(d){d.all.forEach(function(it){itemSet(it,false);});});syncMasters();});
 daybtns.appendChild(noneb);
 
-function initDay(d){d.all.forEach(function(it){itemSet(it,it.mealt?false:true);});(d.meals||[]).forEach(function(me){itemSet(me.options[me.chosen],true);});}
+function initDay(d){d.all.forEach(function(it){itemSet(it,it.mealt?false:true);});(d.meals||[]).forEach(function(me){var ch=me.options[me.chosen];(ch.parts||[ch]).forEach(function(p){itemSet(p,true);dimItem(p,false);});});}
 initDay(days[0]);
 dayEls[0].head.classList.add('open');dayEls[0].body.classList.add('open');
 syncMasters();zoomDay(days[0]);
@@ -331,9 +361,10 @@ function mApply(fly){
   map.closePopup(); // cerrar el popup anterior al movernos
   if(isMob()){ // móvil: recorrido progresivo (enciende hasta el paso, apaga lo demás)
     day.all.forEach(function(it){itemSet(it,false);});
-    for(var k=0;k<=mStep;k++){var sk=day.steps[k];itemSet(sk.type==='one'?sk.items[0]:sk.items[sk.chosen],true);}
-  } else if(s.type==='opt'){ s.items.forEach(function(o,k){itemSet(o,k===s.chosen);}); } // solo la opción elegida (su ruta va incluida)
-  else { itemSet(mCur(),true); }
+    for(var k=0;k<=mStep;k++){var sk=day.steps[k];if(sk.type==='opt'){var ch=sk.items[sk.chosen];(ch.parts||[ch]).forEach(function(p){itemSet(p,true);dimItem(p,false);});}else itemSet(sk.items[0],true);}
+  } else if(s.type!=='opt'){ itemSet(mCur(),true); }
+  // comida: elegida a full, alternativas con transparencia (elementos separados: ida/lugar/regreso)
+  if(s.type==='opt'){s.items.forEach(function(o,k){(o.parts||[o]).forEach(function(p){itemSet(p,true);dimItem(p,k!==s.chosen);});});}
   syncMasters();
   var cur=mCur(),ll=cur.ll||(cur.layer._pts&&cur.layer._pts[0]);
   setSel(cur); // resaltar la ruta/lugar actual
@@ -358,7 +389,13 @@ function mRender(){
 }
 function setDay(i){mDay=i;mStep=0;if(isMob())days.forEach(function(d,k){if(k!==i)d.all.forEach(function(it){itemSet(it,false);});});mApply();}
 function findStep(it){for(var di=0;di<days.length;di++){var st=days[di].steps;for(var si=0;si<st.length;si++){var s=st[si];if(s.type==='one'&&s.items[0]===it)return [di,si,0];if(s.type==='opt'){var k=s.items.indexOf(it);if(k>=0)return [di,si,k];}}}return null;}
-function selectStep(it,fly){var f=findStep(it);if(!f)return;mDay=f[0];mStep=f[1];var s=dSteps()[mStep];if(s.type==='opt')s.chosen=f[2];if(isMob())days.forEach(function(d,k){if(k!==mDay)d.all.forEach(function(x){itemSet(x,false);});});mApply(fly);}
+function selectStep(it,fly){
+  if(it&&it.optRef){selectStep(it.optRef,fly);return;} // click en ida/regreso → selecciona su opción
+  var f=findStep(it);
+  if(!f){ // elemento suelto: enciende, resalta y vuela sin cambiar de paso
+    itemSet(it,true);setSel(it);map.closePopup();var ll=it.ll||(it.coordsLL&&L.latLng(it.coordsLL[0][0],it.coordsLL[0][1]));
+    if(fly!==false&&ll){map.flyTo(ll,15,{duration:.5});setTimeout(function(){openPop(it);},520);}else openPop(it);return;}
+  mDay=f[0];mStep=f[1];var s=dSteps()[mStep];if(s.type==='opt')s.chosen=f[2];if(isMob())days.forEach(function(d,k){if(k!==mDay)d.all.forEach(function(x){itemSet(x,false);});});mApply(fly);}
 function dayPicker(){
   var menu=document.createElement('div');menu.className='daymenu';
   menu.innerHTML=days.map(function(d,k){return '<button data-k="'+k+'"'+(k===mDay?' class="on"':'')+'>'+esc(d.label)+(d.travelTxt?(' · 🕐 '+esc(d.travelTxt)):'')+'</button>';}).join('');
