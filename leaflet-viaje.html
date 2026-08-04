@@ -141,9 +141,11 @@ function mkItiDay(day,open){
   var tt=day.travelTxt?('<span class="dtime">🕐 '+esc(day.travelTxt)+'</span>'):'';
   head.innerHTML='<span class="caret">▶</span><span class="dname">'+esc(day.label)+'</span>'+tt;
   var body=document.createElement('div');body.className='dbody'+(open?' open':'');
-  // paradas ordenadas primero (por número), luego el resto de lugares
+  // paradas ordenadas primero (por número), luego el resto de lugares (sin duplicar sitios ya listados como parada)
+  function norm(s){return String(s||'').replace(/^[\s⭐🍜🏨✈️📍·]+/,'').replace(/\s*\(d\d+\)\s*$/,'').trim().toLowerCase();}
   var stops=day.places.filter(function(it){return it.num;}).sort(function(a,b){return a.num-b.num;});
-  var otros=day.places.filter(function(it){return !it.num;});
+  var stopN={};stops.forEach(function(it){stopN[norm(stopClean(it.name))]=1;});
+  var otros=day.places.filter(function(it){return !it.num && !stopN[norm(it.name)];});
   stops.concat(otros).forEach(function(it){
     var row=document.createElement('div');row.className='it';
     var t=it.num?stopTime(it.name):'';
