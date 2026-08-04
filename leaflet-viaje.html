@@ -60,10 +60,29 @@
     #map{left:380px}
     .it .nm,.it .ds{white-space:normal}
   }
-  @media(max-width:600px){.panel{width:84vw;max-width:320px}.fold{display:block}.panel.hidden{display:none}}
+  @media(min-width:601px) and (max-width:919px){.panel{width:84vw;max-width:320px}.fold{display:block}.panel.hidden{display:none}}
+  /* modo móvil: barras de recorrido paso a paso */
+  .mbar{position:absolute;left:8px;right:8px;z-index:1002;display:none;gap:6px;align-items:center}
+  .mbar.mtop{top:8px}.mbar.mbot{bottom:8px}
+  .mbar .nav{width:40px;height:40px;border-radius:10px;border:none;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.28);font-size:22px;line-height:1;cursor:pointer;flex:0 0 auto}
+  .mbar .nav:disabled{opacity:.4}
+  .mbar .cur{flex:1;background:#fff;border:none;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.28);padding:9px 10px;font-size:13px;font-weight:700;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mbar .cur .stp{font-size:10px;color:#8a7f72;font-weight:600}
+  .mbar .mopts{flex:1;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+  .mbar .mopts::-webkit-scrollbar{display:none}
+  .mbar .opt{flex:0 0 auto;background:#fff;border:1px solid #ccc;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.22);padding:7px 10px;font-size:12px;font-weight:600;cursor:pointer;max-width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mbar .opt.on{background:#b23a2a;color:#fff;border-color:#b23a2a}
+  .daymenu{position:absolute;inset:0;z-index:1004;background:rgba(0,0,0,.4);display:flex;flex-direction:column;justify-content:center;gap:6px;padding:18px}
+  .daymenu button{background:#fff;border:none;border-radius:9px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;text-align:left}
+  .daymenu button.on{background:#b23a2a;color:#fff}
+  body.mob .panel{display:none}
+  body.mob .fold{display:none}
+  body.mob .mbar{display:flex}
 </style></head><body>
 <div id="map"></div>
 <button class="fold" id="fold">☰</button>
+<div class="mbar mtop" id="mtop"></div>
+<div class="mbar mbot" id="mbot"></div>
 <div class="panel" id="panel">
   <div class="phead"><h1>⛩️ Japón 2026 · mapa por día</h1>
     <div class="sub">Casilla = prender/apagar. Toca el nombre para volar ahí. Rojo = hora fija · gris = estimada.</div></div>
@@ -217,5 +236,60 @@ days[0].all.forEach(function(it){itemSet(it,true);});
 dayEls[0].head.classList.add('open');dayEls[0].body.classList.add('open');
 syncMasters();zoomDay(days[0]);
 document.getElementById('fold').addEventListener('click',function(){document.getElementById('panel').classList.toggle('hidden');});
+
+// ================= MÓVIL: recorrido paso a paso =================
+function isResto(it){return it&&!it.seg&&it.kind!=='stop'&&it.kind!=='hotel'&&it.kind!=='aero';}
+function buildSteps(day){
+  var steps=[],i=0,seq=day.seq;
+  while(i<seq.length){
+    if(isResto(seq[i])){var opts=[];while(i<seq.length&&isResto(seq[i])){opts.push(seq[i]);i++;}
+      steps.push({type:'opt',items:opts,title:'🍴 Comer',chosen:0});}
+    else{steps.push({type:'one',items:[seq[i]],title:seq[i].title,seg:!!seq[i].seg});i++;}
+  }
+  // opción por default = la más cercana al último punto conocido
+  var lastLL=null;
+  steps.forEach(function(s){
+    if(s.type==='one'&&s.items[0].ll)lastLL=s.items[0].ll;
+    else if(s.type==='opt'&&lastLL){var best=0,bd=1e12;s.items.forEach(function(o,k){if(o.ll){var d=lastLL.distanceTo(o.ll);if(d<bd){bd=d;best=k;}}});s.chosen=best;}
+  });
+  return steps;
+}
+var mDay=0,mStep=0,mSteps=[];
+function mCur(){var s=mSteps[mStep];return s.type==='one'?s.items[0]:s.items[s.chosen];}
+function mApply(){
+  var day=days[mDay];
+  day.all.forEach(function(it){itemSet(it,false);});
+  for(var k=0;k<=mStep&&k<mSteps.length;k++){var s=mSteps[k];itemSet(s.type==='one'?s.items[0]:s.items[s.chosen],true);}
+  syncMasters();
+  var cur=mCur(),ll=cur.ll||(cur.layer._pts&&cur.layer._pts[0]);
+  if(ll)map.flyTo(ll,cur.seg?14:16,{duration:.5});
+  setTimeout(function(){cur.layer.openPopup&&cur.layer.openPopup();},520);
+  mRender();
+}
+function mRender(){
+  var day=days[mDay],s=mSteps[mStep];
+  var top=document.getElementById('mtop'),bot=document.getElementById('mbot');
+  var mid;
+  if(s.type==='opt'){mid='<div class="mopts">'+s.items.map(function(o,k){return '<button class="opt'+(k===s.chosen?' on':'')+'" data-k="'+k+'">'+esc(o.title)+'</button>';}).join('')+'</div>';}
+  else{mid='<div class="cur"><div class="stp">Paso '+(mStep+1)+'/'+mSteps.length+'</div>'+(s.seg?'🚇 ':'')+esc(s.title)+'</div>';}
+  top.innerHTML='<button class="nav" id="mprev" '+(mStep<=0?'disabled':'')+'>‹</button>'+mid+'<button class="nav" id="mnext" '+(mStep>=mSteps.length-1?'disabled':'')+'>›</button>';
+  document.getElementById('mprev').onclick=function(){if(mStep>0){mStep--;mApply();}};
+  document.getElementById('mnext').onclick=function(){if(mStep<mSteps.length-1){mStep++;mApply();}};
+  if(s.type==='opt')top.querySelectorAll('.opt').forEach(function(b){b.onclick=function(){s.chosen=+b.getAttribute('data-k');mApply();};});
+  bot.innerHTML='<button class="nav" id="dprev" '+(mDay<=0?'disabled':'')+'>‹</button><button class="cur" id="dsel">'+esc(day.label)+' ▾</button><button class="nav" id="dnext" '+(mDay>=days.length-1?'disabled':'')+'>›</button>';
+  document.getElementById('dprev').onclick=function(){if(mDay>0)setDay(mDay-1);};
+  document.getElementById('dnext').onclick=function(){if(mDay<days.length-1)setDay(mDay+1);};
+  document.getElementById('dsel').onclick=dayPicker;
+}
+function setDay(i){mDay=i;mStep=0;mSteps=buildSteps(days[i]);days.forEach(function(d,k){if(k!==i)d.all.forEach(function(it){itemSet(it,false);});});mApply();}
+function dayPicker(){
+  var menu=document.createElement('div');menu.className='daymenu';
+  menu.innerHTML=days.map(function(d,k){return '<button data-k="'+k+'"'+(k===mDay?' class="on"':'')+'>'+esc(d.label)+(d.travelTxt?(' · 🕐 '+esc(d.travelTxt)):'')+'</button>';}).join('');
+  document.body.appendChild(menu);
+  menu.querySelectorAll('button').forEach(function(b){b.onclick=function(e){e.stopPropagation();setDay(+b.getAttribute('data-k'));document.body.removeChild(menu);};});
+  menu.onclick=function(){document.body.removeChild(menu);};
+}
+function checkMobile(){var m=window.innerWidth<=700;document.body.classList.toggle('mob',m);if(m&&!mSteps.length)setDay(0);setTimeout(function(){map.invalidateSize();},60);}
+window.addEventListener('resize',checkMobile);checkMobile();
 setTimeout(function(){map.invalidateSize();},200);
 </script></body></html>
