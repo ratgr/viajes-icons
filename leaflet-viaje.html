@@ -61,12 +61,20 @@
     .panel{position:absolute;top:0;left:0;height:100%;max-height:100%;width:380px;border-radius:0;box-shadow:2px 0 12px rgba(0,0,0,.12)}
     #map{left:380px}
     .it .nm,.it .ds{white-space:normal}
-    .mbar{left:392px;right:14px}.mbar.mtop{top:12px}.mbar.mbot{bottom:12px}
   }
   /* modo móvil: barras de recorrido paso a paso */
   .mbar{position:absolute;left:8px;right:8px;z-index:1002;display:flex;gap:6px;align-items:center;pointer-events:none}
   .mbar>*{pointer-events:auto}
   .mbar.mtop{top:8px}.mbar.mbot{bottom:8px}
+  /* escritorio (no móvil): barras a la derecha del panel, nunca lo tapan */
+  body:not(.mob) .mbar{left:392px;right:14px}
+  body:not(.mob) .mbar.mtop{top:12px}
+  body:not(.mob) .mbar.mbot{bottom:12px}
+  /* grupo de comida colapsable + ruta a cada opción */
+  .mealh{cursor:pointer;display:flex;align-items:center;gap:5px}
+  .mealh .mcar{margin-left:auto;color:#b23a2a;font-size:11px;transition:transform .15s}
+  .mealh.closed .mcar{transform:rotate(-90deg)}
+  .mealc.closed{display:none}
   .mbar .nav{width:40px;height:40px;border-radius:10px;border:none;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.28);font-size:22px;line-height:1;cursor:pointer;flex:0 0 auto}
   .mbar .nav:disabled{opacity:.4}
   .mbar .cur{flex:1;background:#fff;border:none;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.28);padding:9px 10px;font-size:13px;font-weight:700;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -190,13 +198,22 @@ DATA.days.forEach(function(d){
   var seq=[],added={};hoteles.forEach(function(h){seq.push(h);});
   segs.forEach(function(sg,i){seq.push(sg);if(arrMap[i])arrMap[i].forEach(function(st){seq.push(st);added[st.num]=1;});});
   stops.forEach(function(st){if(!added[st.num])seq.push(st);});
-  meals.forEach(function(me){var pos=seq.length;for(var i2=0;i2<seq.length;i2++){var it=seq[i2];if(it.time&&me.time&&it.time>me.time){pos=i2;break;}}seq.splice(pos,0,me);});
+  meals.forEach(function(me){
+    var pos=seq.length;for(var i2=0;i2<seq.length;i2++){var it=seq[i2];if(it.time&&me.time&&it.time>me.time){pos=i2;break;}}
+    var fromLL=null;for(var j=pos-1;j>=0;j--){var pv=seq[j];if(pv&&!pv.meal&&pv.ll){fromLL=pv.ll;break;}}
+    me.fromLL=fromLL;
+    me.options.forEach(function(o){if(fromLL){o.route=L.polyline([fromLL,o.ll],{color:'#b23a2a',weight:3,opacity:.85,dashArray:'3 7'});
+      var mm=fromLL.distanceTo(o.ll);o.rmin=Math.max(5,Math.round(mm/76.7/5)*5);o.rtxt='🚶 '+(mm<1000?(Math.round(mm/10)*10+' m'):((mm/1000).toFixed(1)+' km'))+' · ~'+o.rmin+' min';}});
+    seq.splice(pos,0,me);
+  });
   restos.forEach(function(r){seq.push(r);});
   days.push({key:d.key,label:d.label,travelTxt:d.travelTxt,seq:seq,restos:restos,meals:meals,all:stops.concat(hoteles,restos,segs,opall)});
 });
 days.forEach(function(d){d.steps=buildStepsFor(d);});
 
-function itemSet(it,on){if(on){if(!map.hasLayer(it.layer))map.addLayer(it.layer);}else{if(map.hasLayer(it.layer))map.removeLayer(it.layer);}if(it.cb)it.cb.checked=on;}
+function itemSet(it,on){if(on){if(!map.hasLayer(it.layer))map.addLayer(it.layer);}else{if(map.hasLayer(it.layer))map.removeLayer(it.layer);}
+  if(it.route){if(on){if(!map.hasLayer(it.route))map.addLayer(it.route);}else{if(map.hasLayer(it.route))map.removeLayer(it.route);}} // ruta a la comida va con su lugar
+  if(it.cb)it.cb.checked=on;}
 function dayPts(day){var pts=[];day.all.forEach(function(it){if(it.layer.getLatLng)pts.push(it.layer.getLatLng());else if(it.layer._pts)pts.push.apply(pts,it.layer._pts);});return pts;}
 function zoomDay(day){var pts=dayPts(day);if(pts.length)map.fitBounds(L.latLngBounds(pts).pad(.15));}
 function volar(it){selectStep(it,true);}
@@ -209,7 +226,7 @@ function mkRow(it){
   if(it.seg){vis='<span class="ln" style="border-top-color:'+it.color+'"></span>';}
   else if(it.num){vis='<span class="npin">'+it.num+'</span>';}
   else{vis='<span class="pin" style="background:'+it.color+'"></span>';}
-  var ds=it.seg?[it.durTxt,it.distTxt].filter(Boolean).join(' · '):((it.tier||'')+((it.tier&&it.desc)?' · ':'')+(it.desc||''));
+  var ds=it.seg?[it.durTxt,it.distTxt].filter(Boolean).join(' · '):[it.tier,it.rtxt,it.desc].filter(Boolean).join(' · ');
   var tm='';
   if(it.time){tm='<span class="tm '+(it.fixTime?'fix':'est')+'">'+esc(it.time)+'</span>';}
   else if(it.seg&&it.durTxt){tm='<span class="tm est">'+esc(it.durTxt)+'</span>';}
@@ -242,8 +259,13 @@ function mkDay(day,open){
   head.innerHTML='<input type="checkbox" class="dm"><span class="caret">▶</span><span class="dname">'+esc(day.label)+'</span>'+tt;
   var body=document.createElement('div');body.className='dbody'+(open?' open':'');
   day.seq.forEach(function(it){
-    if(it.meal){body.insertAdjacentHTML('beforeend','<div class="sublbl">🍴 Comer'+(it.time?(' · '+esc(it.time)):'')+' — elige</div>');it.options.forEach(function(o){body.appendChild(mkRow(o));});}
-    else body.appendChild(mkRow(it));
+    if(it.meal){
+      var mh=document.createElement('div');mh.className='sublbl mealh';
+      mh.innerHTML='🍴 Comer'+(it.time?(' · '+esc(it.time)):'')+' — elige <span class="mcar">▼</span>';
+      var mc=document.createElement('div');mc.className='mealc';it.options.forEach(function(o){mc.appendChild(mkRow(o));});
+      mh.addEventListener('click',function(){mh.classList.toggle('closed');mc.classList.toggle('closed');});
+      body.appendChild(mh);body.appendChild(mc);
+    } else body.appendChild(mkRow(it));
   });
   var dm=head.querySelector('.dm');
   head.addEventListener('click',function(e){if(e.target===dm)return;head.classList.toggle('open');body.classList.toggle('open');});
@@ -295,20 +317,17 @@ var mDay=0,mStep=0;
 function dSteps(){return days[mDay].steps;}
 function mCur(){var s=dSteps()[mStep];return s.type==='one'?s.items[0]:s.items[s.chosen];}
 function openPop(it){var L2=it&&it.layer;if(!L2)return;if(L2._popup)L2.openPopup();else if(L2._pop)L2._pop.openPopup(L2._mid);} // grupo (ruta) no tiene popup propio → abre el de su línea
-var foodLine=L.polyline([],{color:'#b23a2a',weight:3,opacity:.85,dashArray:'3 7'}); // ruta a la comida elegida
 function mApply(fly){
   var day=days[mDay],s=dSteps()[mStep];
   map.closePopup(); // cerrar el popup anterior al movernos
-  if(map.hasLayer(foodLine))map.removeLayer(foodLine);
   if(isMob()){ // móvil: recorrido progresivo (enciende hasta el paso, apaga lo demás)
     day.all.forEach(function(it){itemSet(it,false);});
     for(var k=0;k<=mStep;k++){var sk=day.steps[k];itemSet(sk.type==='one'?sk.items[0]:sk.items[sk.chosen],true);}
-  } else if(s.type==='opt'){ s.items.forEach(function(o,k){itemSet(o,k===s.chosen);}); } // solo la opción elegida
+  } else if(s.type==='opt'){ s.items.forEach(function(o,k){itemSet(o,k===s.chosen);}); } // solo la opción elegida (su ruta va incluida)
   else { itemSet(mCur(),true); }
   syncMasters();
   var cur=mCur(),ll=cur.ll||(cur.layer._pts&&cur.layer._pts[0]);
   setSel(cur); // resaltar la ruta/lugar actual
-  if(s.type==='opt'&&s.fromLL&&cur.ll){foodLine.setLatLngs([s.fromLL,cur.ll]);foodLine.addTo(map);} // desde donde estamos → comida
   if(fly!==false&&ll){map.flyTo(ll,cur.seg?14:16,{duration:.5});setTimeout(function(){openPop(cur);},520);}
   else openPop(cur); // abrir popup también en click (lugares y rutas)
   mRender();
