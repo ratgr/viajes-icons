@@ -448,8 +448,15 @@ var drawCtl=L.control({position:'topleft'});
 drawCtl.onAdd=function(){var b=L.DomUtil.create('div','leaflet-bar');b.innerHTML='<a href="#" id="drawtgl" title="Dibujar ruta a mano">✏️</a>';L.DomEvent.disableClickPropagation(b);
   b.querySelector('#drawtgl').addEventListener('click',function(e){e.preventDefault();toggleDraw();});return b;};
 drawCtl.addTo(map);
+// puntos de anclaje = extremos de rutas + marcadores (para empatar continuidad)
+var SNAP=[];days.forEach(function(d){d.all.forEach(function(it){
+  if(it.ll)SNAP.push(it.ll);
+  else if(it.coordsLL&&it.coordsLL.length){var c=it.coordsLL;SNAP.push(L.latLng(c[0][0],c[0][1]));SNAP.push(L.latLng(c[c.length-1][0],c[c.length-1][1]));}
+});});
+function drawSnap(latlng){var pt=map.latLngToContainerPoint(latlng),best=null,bd=15;
+  SNAP.forEach(function(s){var d=pt.distanceTo(map.latLngToContainerPoint(s));if(d<bd){bd=d;best=s;}});return best||latlng;}
 var drawBox=document.createElement('div');drawBox.id='drawbox';drawBox.style.display='none';
-drawBox.innerHTML='<div class="dbhd">✏️ Ruta a mano — clic en el mapa para poner puntos en orden</div>'
+drawBox.innerHTML='<div class="dbhd">✏️ Ruta a mano — clic en orden. Los clics cerca del fin de otra ruta o de un punto se PEGAN ahí (continuidad).</div>'
   +'<textarea id="dbtxt" readonly rows="6" placeholder="lat, lng por línea…"></textarea>'
   +'<div class="dbcount" id="dbcount">0 puntos</div>'
   +'<div class="dbbtns"><button id="dbundo">↶ Deshacer</button><button id="dbclear">🗑 Borrar</button><button id="dbcopy">📋 Copiar</button><button id="dbclose">✕ Cerrar</button></div>';
@@ -467,7 +474,7 @@ function toggleDraw(){
   map.getContainer().style.cursor=drawMode?'crosshair':'';
   if(drawMode){drawLine.addTo(map);drawDots.addTo(map);}
 }
-map.on('click',function(e){if(drawMode){drawPts.push(e.latlng);drawRender();}});
+map.on('click',function(e){if(drawMode){drawPts.push(drawSnap(e.latlng));drawRender();}});
 document.getElementById('dbundo').addEventListener('click',function(){drawPts.pop();drawRender();});
 document.getElementById('dbclear').addEventListener('click',function(){drawPts=[];drawRender();});
 document.getElementById('dbclose').addEventListener('click',function(){toggleDraw();});
