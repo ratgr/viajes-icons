@@ -10,6 +10,7 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 SD = os.path.dirname(os.path.abspath(__file__))
 DATA = open(SD + "/viaje-data.json", encoding="utf-8").read()
+from modales import MODAL_CSS
 
 HTML = r"""<!doctype html>
 <html lang="es"><head>
@@ -89,8 +90,10 @@ HTML = r"""<!doctype html>
   .mealh{cursor:pointer;display:flex;align-items:center;gap:5px}
   .mealh .mcar{margin-left:auto;color:#b23a2a;font-size:11px;transition:transform .15s}
   .mealh.closed .mcar{transform:rotate(-90deg)}
+  .mealc{padding-left:16px;border-left:2px solid #efe6e0;margin-left:8px}
   .mealc.closed{display:none}
-  .optgrp{margin:2px 0 7px;border-left:2px solid #efe6e0;padding-left:3px}
+  .optgrp{margin:2px 0 7px;border-left:2px solid #d8cfc7;padding-left:6px}
+  .planh{font-weight:700;font-size:11.5px;color:#b23a2a;padding:3px 0 1px}
   .dimmed{opacity:.4} /* marcador de alternativa (no elegida) */
   .it.dimrow .nm,.it.dimrow .ds{opacity:.55}
   .mbar .nav{width:40px;height:40px;border-radius:10px;border:none;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.28);font-size:22px;line-height:1;cursor:pointer;flex:0 0 auto}
@@ -165,7 +168,7 @@ function placeMarker(it){
   var hist=it.hist?('<div class="ph">🏛️ '+esc(it.hist)+'</div>'):'';
   var html='<div class="lp"><div class="tt"><a href="'+APP+'" target="_blank" title="Ver el plan">'+esc(it.title)+'</a>'+metaHtml+'</div>'+
     img+desc+hist+(it.maps?'<a class="gm" href="'+it.maps+'" target="_blank">Abrir en Google Maps ↗</a>':'')+'</div>';
-  m.bindPopup(html,{maxWidth:285});
+  m.bindPopup(it.pop||html,{maxWidth:it.pop?320:285});
   m.on('click',function(){if(typeof selectStep==='function')selectStep(it,false);});
   return m;
 }
@@ -178,7 +181,7 @@ function segLayer(seg){
   var start=L.circleMarker(a,{radius:5,color:seg.color,weight:2,fillColor:'#fff',fillOpacity:1}).bindPopup('<div class="lp">Sale de <b>'+esc(e.a)+'</b></div>');
   var end=L.circleMarker(b,{radius:5,color:'#fff',weight:2,fillColor:seg.color,fillOpacity:1}).bindPopup('<div class="lp">Llega a <b>'+esc(e.b)+'</b></div>');
   var det=[seg.durTxt,seg.distTxt].filter(Boolean).join(' · ');
-  var pop='<div class="lp">'+esc(seg.name)+(det?(' · <b>'+esc(det)+'</b>'):'')+'</div>';pl.bindPopup(pop);hit.bindPopup(pop);
+  var pop=seg.pop||('<div class="lp">'+esc(seg.name)+(det?(' · <b>'+esc(det)+'</b>'):'')+'</div>');var pw=seg.pop?320:300;pl.bindPopup(pop,{maxWidth:pw});hit.bindPopup(pop,{maxWidth:pw});
   var parts=[hit,pl,dec];
   if(seg.mode!=='walk'){for(var i=1;i<seg.coords.length-1;i++){parts.push(L.circleMarker(seg.coords[i],{radius:3.5,color:seg.color,weight:1.5,fillColor:'#fff',fillOpacity:1,interactive:false}));}}
   parts.push(start,end);
@@ -190,7 +193,7 @@ function segLayer(seg){
 var days=[];
 DATA.days.forEach(function(d){
   var stops=d.places.filter(function(p){return p.kind==='stop';})
-    .map(function(p){return {kind:'stop',num:p.order,title:stopClean(p.name),time:stopTime(p.name),
+    .map(function(p){return {kind:'stop',num:p.order,title:stopClean(p.name),time:stopTime(p.name),trange:p.trange,
       desc:'',tier:'',maps:'https://www.google.com/maps/search/?api=1&query='+p.lat+','+p.lng,foto:'',hist:'',
       color:'#b23a2a',ll:L.latLng(p.lat,p.lng),inc:0,fixTime:p.fixTime};})
     .sort(function(a,b){return a.num-b.num;});
@@ -198,13 +201,14 @@ DATA.days.forEach(function(d){
   var hoteles=[],restos=[];
   d.places.filter(function(p){return p.kind!=='stop';}).forEach(function(p){
     var s=byNorm[norm(p.name)];
-    if(s&&p.kind==='site'){s.desc=p.desc;s.maps=p.maps;s.foto=p.foto;s.hist=p.hist;return;}
-    var it={kind:p.kind,num:0,title:p.name,time:p.time||'',fixTime:p.time||'',desc:p.desc,tier:p.tier,foto:p.foto,hist:p.hist,key:p.key||'',
-      maps:p.maps,color:pColor(p.kind,p.tier),ll:L.latLng(p.lat,p.lng)};
+    if(s&&p.kind==='site'){s.desc=p.desc;s.maps=p.maps;s.foto=p.foto;s.hist=p.hist;s.pop=p.pop;return;}
+    var it={kind:p.kind,num:0,title:p.name,time:p.time||'',trange:p.trange,fixTime:p.time||'',desc:p.desc,tier:p.tier,foto:p.foto,hist:p.hist,key:p.key||'',
+      pop:p.pop,maps:p.maps,color:pColor(p.kind,p.tier),ll:L.latLng(p.lat,p.lng)};
     (p.kind==='hotel'||p.kind==='aero')?hoteles.push(it):restos.push(it);
   });
   var segs=d.segments.map(function(s){var e=segEnds(s.name),cd=s.coords;return {seg:true,layer:segLayer(s),
     name:s.name,title:(e?(e.a+' → '+e.b):s.name),color:s.color,durTxt:s.durTxt,distTxt:s.distTxt,dur:s.dur||0,mode:s.mode,coordsLL:cd,
+    off:!!s.off,trange:s.trange,pop:s.pop,
     ord:parseInt((/·(\d+)/.exec(s.name)||[0,'999'])[1],10),end:L.latLng(cd[cd.length-1][0],cd[cd.length-1][1])};});
   segs.sort(function(a,b){return a.ord-b.ord;});
   segs.forEach(function(it){[it.layer._hit,it.layer._pop].forEach(function(ln){if(ln)ln.on('click',function(){selectStep(it,false);});});}); // clic en ruta = seleccionarla
@@ -215,15 +219,17 @@ DATA.days.forEach(function(d){
   var acc=0;segs.forEach(function(sg,i){acc+=sg.dur;if(arrMap[i]){arrMap[i].forEach(function(st){st.inc=acc;st.incTxt=fmtMin(acc);});acc=0;}});
   // comidas por hora: cada una es un grupo de opciones (marcadores propios)
   var meals=(d.meals||[]).map(function(me){
+    if(me.plan){return {meal:true,plan:true,time:me.time,trange:me.trange,options:me.options,chosen:0};} // planes en paralelo
     var opts=me.opts.map(function(o){var it={kind:'resto',num:0,title:o.name,time:me.time||'',desc:o.desc,tier:o.tier,foto:o.foto,hist:'',
-      key:o.key,mealt:me.time,maps:o.maps,color:pColor('resto',o.tier),ll:L.latLng(o.lat,o.lng)};return it;});
-    return {meal:true,time:me.time,options:opts,chosen:0};
+      key:o.key,mealt:me.time,pop:o.pop,maps:o.maps,ida:o.ida,reg:o.reg,price:o.price,nogeo:!!o.nogeo,color:pColor('resto',o.tier),
+      ll:o.nogeo?null:L.latLng(o.lat,o.lng)};return it;});
+    return {meal:true,time:me.time,trange:me.trange,options:opts,chosen:0};
   });
   var mkeys={};meals.forEach(function(me){me.options.forEach(function(o){if(o.key)mkeys[o.key]=1;});});
   restos=restos.filter(function(r){return !(r.key&&mkeys[r.key]);}); // los que ya son opción de comida salen de "sueltos"
   // marcadores (tras calcular inc, para el meta del popup)
   var opall=[];meals.forEach(function(me){opall=opall.concat(me.options);});
-  stops.concat(hoteles,restos,opall).forEach(function(it){it.layer=placeMarker(it);});
+  stops.concat(hoteles,restos,opall).forEach(function(it){it.layer=it.nogeo?null:placeMarker(it);});
   // secuencia intercalada: hotel → (tramos… parada)… → comidas por hora → restaurantes sueltos
   // ubicar hoteles/aeropuertos por su conexión a las rutas (no todos al inicio)
   var farS=[],farE=[],beforeSeg={},afterSeg={};
@@ -246,30 +252,62 @@ DATA.days.forEach(function(d){
   stops.forEach(function(st){if(!added[st.num])seq.push(st);});
   function wkm(m){return m<1000?(Math.round(m/10)*10+' m'):((m/1000).toFixed(1)+' km');}
   function wmin(m){return Math.max(5,Math.round(m/66.7/5)*5);} // 4 km/h (66.7 m/min)
+  function lineDist(cs){var d=0;for(var i=1;i<cs.length;i++){d+=L.latLng(cs[i-1][0],cs[i-1][1]).distanceTo(L.latLng(cs[i][0],cs[i][1]));}return d;}
   var mroutes=[]; // ida/regreso como elementos separados
   meals.forEach(function(me){
+    if(me.plan){ // grupo de PLANES en paralelo: cada opción = una ruta seleccionable
+      me.options.forEach(function(o){
+        o.parts=[]; o.ll=null;
+        (o.elems||[]).forEach(function(el){
+          var pop=el.pop||('<div class="lp">'+esc(el.name||'')+'</div>'), lyr, coordsLL=null;
+          if(el.line){var w=el.mode==='walk'?3:5,dash=el.mode==='walk'?'4 7':null;
+            lyr=L.polyline(el.line,{color:el.color,weight:w,opacity:.9,dashArray:dash});
+            coordsLL=el.line; if(!o.ll)o.ll=L.latLng(el.line[0][0],el.line[0][1]);}
+          else{lyr=L.circleMarker(el.pt,{radius:6,color:'#fff',weight:2,fillColor:el.color,fillOpacity:1});
+            if(!o.ll)o.ll=L.latLng(el.pt[0],el.pt[1]);}
+          lyr.bindPopup(pop,{maxWidth:el.pop?320:220});
+          var part={seg:!!el.line,layer:lyr,optRef:o,title:el.name||'',color:el.color,mode:el.mode||'walk',coordsLL:coordsLL,mealt:me.time};
+          o.parts.push(part);mroutes.push(part);lyr.on('click',function(){selectStep(part,false);});
+        });
+      });
+      var pp=seq.length;
+      for(var pk=seq.length-1;pk>=0;pk--){var pv2=seq[pk];if(pv2&&!pv2.meal&&pv2.time&&/^\d\d:\d\d$/.test(pv2.time)&&me.time&&pv2.time<=me.time){pp=pk+1;break;}}
+      seq.splice(pp,0,me);
+      return;
+    }
     // ubicar la comida en su hora: TRAS la última parada cuya hora <= la de la comida (cronológico)
     var pos=seq.length;
     for(var pi=seq.length-1;pi>=0;pi--){var pit=seq[pi];if(pit&&!pit.meal&&pit.time&&/^\d\d:\d\d$/.test(pit.time)&&me.time&&pit.time<=me.time){pos=pi+1;break;}}
     var fromLL=null;for(var j=pos-1;j>=0;j--){var pv=seq[j];if(pv&&!pv.meal&&pv.ll){fromLL=pv.ll;break;}}
-    var toLL=null;for(var j2=pos;j2<seq.length;j2++){var nx=seq[j2];if(nx&&!nx.meal&&nx.ll){toLL=nx.ll;break;}}
+    var toLL=null;for(var j2=pos;j2<seq.length;j2++){var nx=seq[j2];if(nx&&!nx.meal){if(nx.ll){toLL=nx.ll;break;}if(nx.seg&&!nx.off&&nx.coordsLL){toLL=L.latLng(nx.coordsLL[0][0],nx.coordsLL[0][1]);break;}}}
     me.fromLL=fromLL;me.toLL=toLL;
     me.options.forEach(function(o){
       o.parts=[];
-      if(fromLL){var mi=fromLL.distanceTo(o.ll),pl=L.polyline([fromLL,o.ll],{color:'#b23a2a',weight:3,opacity:.9,dashArray:'3 7'});
+      if(o.nogeo){o.parts.push(o);return;} // genérica sin lugar → solo fila de panel, sin ruta ni marcador
+      // ida real (o.ida = ruta OSRM del punto anterior al resto) o recta como fallback
+      var idaC=o.ida||(fromLL?[[fromLL.lat,fromLL.lng],[o.ll.lat,o.ll.lng]]:null);
+      if(idaC){var mi=lineDist(idaC),pl=L.polyline(idaC,{color:'#b23a2a',weight:3,opacity:.9,dashArray:'3 7'});
         pl.bindPopup('<div class="lp">🚶 Ida a <b>'+esc(o.title)+'</b> · '+wkm(mi)+' · ~'+wmin(mi)+' min</div>');
-        var ida={seg:true,layer:pl,optRef:o,title:'ida → '+o.title,color:'#b23a2a',mode:'walk',durTxt:'~'+wmin(mi)+' min',distTxt:wkm(mi),mealt:me.time,coordsLL:[[fromLL.lat,fromLL.lng],[o.ll.lat,o.ll.lng]]};
+        var ida={seg:true,layer:pl,optRef:o,title:'ida → '+o.title,color:'#b23a2a',mode:'walk',durTxt:'~'+wmin(mi)+' min',distTxt:wkm(mi),mealt:me.time,coordsLL:idaC};
         o.ida=ida;o.parts.push(ida);mroutes.push(ida);pl.on('click',function(){selectStep(ida,false);});}
       o.parts.push(o);
-      if(toLL){var mv=o.ll.distanceTo(toLL),pl2=L.polyline([o.ll,toLL],{color:'#c8791f',weight:3,opacity:.9,dashArray:'1 6'});
-        pl2.bindPopup('<div class="lp">🚶 Regreso al itinerario · '+wkm(mv)+' · ~'+wmin(mv)+' min</div>');
-        var reg={seg:true,layer:pl2,optRef:o,title:'regreso → itinerario',color:'#c8791f',mode:'walk',durTxt:'~'+wmin(mv)+' min',distTxt:wkm(mv),mealt:me.time,coordsLL:[[o.ll.lat,o.ll.lng],[toLL.lat,toLL.lng]]};
+      // regreso real (o.reg = ruta OSRM del resto al SIGUIENTE punto) o recta como fallback
+      var regC=o.reg||(toLL?[[o.ll.lat,o.ll.lng],[toLL.lat,toLL.lng]]:null);
+      if(regC){var mv=lineDist(regC),pl2=L.polyline(regC,{color:'#c8791f',weight:3,opacity:.9,dashArray:'1 6'});
+        pl2.bindPopup('<div class="lp">🚶 Al siguiente punto · '+wkm(mv)+' · ~'+wmin(mv)+' min</div>');
+        var reg={seg:true,layer:pl2,optRef:o,title:'regreso → siguiente',color:'#c8791f',mode:'walk',durTxt:'~'+wmin(mv)+' min',distTxt:wkm(mv),mealt:me.time,coordsLL:regC};
         o.reg=reg;o.parts.push(reg);mroutes.push(reg);pl2.on('click',function(){selectStep(reg,false);});}
     });
     seq.splice(pos,0,me);
   });
   restos.forEach(function(r){seq.push(r);});
   farE.forEach(function(h){seq.push(h);}); // aeropuerto de regreso al final
+  // trayectos SIN geometría (vuelo, monorriel interno, trámite): solo fila de panel, ubicados por hora
+  (d.infoTransits||[]).forEach(function(t){
+    var it={seg:true,info:true,title:t.title,durTxt:t.durTxt,trange:t.trange,mode:t.mode,color:t.color,time:t.time,coordsLL:t.coordsLL||null};
+    var pos=0;for(var pi=seq.length-1;pi>=0;pi--){var pv=seq[pi];if(pv&&pv.time&&/^\d\d:\d\d$/.test(pv.time)&&t.time&&pv.time<=t.time){pos=pi+1;break;}}
+    seq.splice(pos,0,it);
+  });
   days.push({key:d.key,label:d.label,travelTxt:d.travelTxt,startTime:d.startTime||'',seq:seq,restos:restos,meals:meals,all:stops.concat(hoteles,restos,segs,opall,mroutes)});
 });
 days.forEach(function(d){d.steps=buildStepsFor(d);});
@@ -293,12 +331,12 @@ if(window.console)CONFLICTS.forEach(function(c){console.warn('⚠️ '+c);});
 window.CONFLICTS=CONFLICTS;
 var _cd=document.createElement('div');_cd.id='conflicts';_cd.style.display='none';_cd.textContent=CONFLICTS.length?CONFLICTS.join(' || '):'sin contradicciones';document.body.appendChild(_cd);
 
-function itemSet(it,on){if(on){if(!map.hasLayer(it.layer))map.addLayer(it.layer);}else{if(map.hasLayer(it.layer))map.removeLayer(it.layer);}if(it.cb)it.cb.checked=on;}
+function itemSet(it,on){if(it.layer){if(on){if(!map.hasLayer(it.layer))map.addLayer(it.layer);}else{if(map.hasLayer(it.layer))map.removeLayer(it.layer);}}if(it.cb)it.cb.checked=on;}
 function dimItem(it,dim){ // alternativas de comida con transparencia
   if(it.seg&&it.layer&&it.layer.setStyle)it.layer.setStyle({opacity:dim?.3:.9});
   else if(it.layer&&it.layer._icon)it.layer._icon.classList.toggle('dimmed',dim);
   if(it._row)it._row.classList.toggle('dimrow',dim);}
-function dayPts(day){var pts=[];day.all.forEach(function(it){if(it.layer.getLatLng)pts.push(it.layer.getLatLng());else if(it.layer._pts)pts.push.apply(pts,it.layer._pts);});return pts;}
+function dayPts(day){var pts=[];day.all.forEach(function(it){if(it.off||!it.layer)return;if(it.layer.getLatLng)pts.push(it.layer.getLatLng());else if(it.layer._pts)pts.push.apply(pts,it.layer._pts);});return pts;}
 function zoomDay(day){var pts=dayPts(day);if(pts.length)map.fitBounds(L.latLngBounds(pts).pad(.15));}
 function volar(it){selectStep(it,true);}
 
@@ -311,13 +349,18 @@ function mkRow(it){
   else if(it.num){vis='<span class="npin">'+it.num+'</span>';}
   else{vis='<span class="pin" style="background:'+it.color+'"></span>';}
   var ds=it.seg?[it.durTxt,it.distTxt].filter(Boolean).join(' · '):[it.tier,it.rtxt,it.desc].filter(Boolean).join(' · ');
+  // badge de tiempo = inicio–fin SIEMPRE (nunca duración): rojo si obligatorio (reserva/fixed), gris si flexible
+  var tlabel=it.trange||it.time;
   var tm='';
-  if(it.time){var cls=it.conflict?'warn':(it.fixTime?'fix':'est');tm='<span class="tm '+cls+'">'+(it.conflict?'⚠️ ':'')+esc(it.time)+'</span>';}
-  else if(it.seg&&it.durTxt){tm='<span class="tm est">'+esc(it.durTxt)+'</span>';}
+  if(tlabel){var cls=it.conflict?'warn':((it.fix||it.fixTime)?'fix':'est');tm='<span class="tm '+cls+'">'+(it.conflict?'⚠️ ':'')+esc(tlabel)+'</span>';}
+  if(it.info)cb.style.visibility='hidden';
   row.appendChild(cb);
   row.insertAdjacentHTML('beforeend',vis+'<div class="bd"><div class="nm">'+esc(it.title)+'</div>'+(ds?'<div class="ds">'+esc(ds)+'</div>':'')+'</div>'+tm);
   cb.addEventListener('change',function(){itemSet(it,cb.checked);syncMasters();});
-  row.querySelector('.bd').addEventListener('click',function(){volar(it);});
+  if(!it.info){row.querySelector('.bd').addEventListener('click',function(){volar(it);});}
+  else if(it.coordsLL){ // sin-geo con geometría solo-seleccionable (vuelo): dibuja al elegir
+    row.querySelector('.bd').addEventListener('click',function(){clearSel();setSel(it);map.fitBounds(L.latLngBounds(it.coordsLL).pad(.2));});
+  }
   it._row=row;
   return row;
 }
@@ -346,9 +389,12 @@ function mkDay(day,open){
   day.seq.forEach(function(it){
     if(it.meal){
       var mh=document.createElement('div');mh.className='sublbl mealh';
-      mh.innerHTML='🍴 '+mealLabel(it.time)+(it.time?(' · '+esc(it.time)):'')+' — elige <span class="mcar">▼</span>';
+      var mlbl=it.plan?('🧭 Elige tu plan'):('🍴 '+mealLabel(it.time));
+      mh.innerHTML=mlbl+((it.trange||it.time)?(' · '+esc(it.trange||it.time)):'')+' — elige <span class="mcar">▼</span>';
       var mc=document.createElement('div');mc.className='mealc';
-      it.options.forEach(function(o){var og=document.createElement('div');og.className='optgrp';(o.parts||[o]).forEach(function(p){og.appendChild(mkRow(p));});mc.appendChild(og);});
+      it.options.forEach(function(o){var og=document.createElement('div');og.className='optgrp';
+        if(it.plan&&o.name){var ph=document.createElement('div');ph.className='planh';ph.textContent=o.name;og.appendChild(ph);}
+        (o.parts||[o]).forEach(function(p){og.appendChild(mkRow(p));});mc.appendChild(og);});
       mh.addEventListener('click',function(){mh.classList.toggle('closed');mc.classList.toggle('closed');});
       body.appendChild(mh);body.appendChild(mc);
     } else body.appendChild(mkRow(it));
@@ -363,9 +409,21 @@ function mkDay(day,open){
 function syncMasters(){dayEls.forEach(function(de){var items=de.day.all,on=items.filter(function(it){return it.cb&&it.cb.checked;}).length;de.dm.checked=on===items.length&&on>0;de.dm.indeterminate=on>0&&on<items.length;if(de.chip)de.chip.classList.toggle('on',on>0);});}
 
 days.forEach(function(d,i){tree.appendChild(mkDay(d,i===0));});
+// mostrar TODA la geometría de un día: alternativas de comida atenuadas, elegida sólida
+function showDay(d){
+  d.all.forEach(function(it){itemSet(it,true);dimItem(it,false);});
+  (d.meals||[]).forEach(function(me){me.options.forEach(function(o,k){(o.parts||[o]).forEach(function(p){itemSet(p,true);dimItem(p,k!==me.chosen);});});});
+}
+// cambio de día EXCLUSIVO: apaga los demás días, enciende todo el nuevo, abre sólo su árbol y hace zoom
+function selectDay(i){
+  days.forEach(function(dd){dd.all.forEach(function(it){itemSet(it,false);});});
+  showDay(days[i]);
+  dayEls.forEach(function(de,k){de.head.classList.toggle('open',k===i);de.body.classList.toggle('open',k===i);});
+  zoomDay(days[i]);syncMasters();
+}
 days.forEach(function(d,i){
   var b=document.createElement('button');b.textContent=d.key;
-  b.addEventListener('click',function(){var items=d.all,anyOff=items.some(function(it){return !it.cb||!it.cb.checked;});items.forEach(function(it){itemSet(it,anyOff);});var de=dayEls[i];de.head.classList.add('open');de.body.classList.add('open');if(anyOff)zoomDay(d);syncMasters();});
+  b.addEventListener('click',function(){selectDay(i);});
   daybtns.appendChild(b);dayEls[i].chip=b;
 });
 var allb=document.createElement('button');allb.className='allbtn';allb.textContent='Todos';
@@ -375,10 +433,7 @@ var noneb=document.createElement('button');noneb.className='nonebtn';noneb.textC
 noneb.addEventListener('click',function(){days.forEach(function(d){d.all.forEach(function(it){itemSet(it,false);});});syncMasters();});
 daybtns.appendChild(noneb);
 
-function initDay(d){d.all.forEach(function(it){itemSet(it,it.mealt?false:true);});(d.meals||[]).forEach(function(me){var ch=me.options[me.chosen];(ch.parts||[ch]).forEach(function(p){itemSet(p,true);dimItem(p,false);});});}
-initDay(days[0]);
-dayEls[0].head.classList.add('open');dayEls[0].body.classList.add('open');
-syncMasters();zoomDay(days[0]);
+selectDay(0); // carga inicial: día 1 exclusivo con toda su geometría
 document.getElementById('fold').addEventListener('click',function(){document.getElementById('panel').classList.toggle('hidden');});
 
 // ================= RECORRIDO PASO A PASO (barra arriba pasos, abajo día) =================
@@ -413,7 +468,7 @@ function mApply(fly){
   // comida: elegida a full, alternativas con transparencia (elementos separados: ida/lugar/regreso)
   if(s.type==='opt'){s.items.forEach(function(o,k){(o.parts||[o]).forEach(function(p){itemSet(p,true);dimItem(p,k!==s.chosen);});});}
   syncMasters();
-  var cur=mCur(),ll=cur.ll||(cur.layer._pts&&cur.layer._pts[0]);
+  var cur=mCur(),ll=cur.ll||(cur.layer&&cur.layer._pts&&cur.layer._pts[0]);
   setSel(cur); // resaltar la ruta/lugar actual
   if(fly!==false&&ll){map.flyTo(ll,cur.seg?14:16,{duration:.5});setTimeout(function(){openPop(cur);},520);}
   else openPop(cur); // abrir popup también en click (lugares y rutas)
@@ -437,8 +492,8 @@ function mRender(){
 function setDay(i){mDay=i;mStep=0;if(isMob())days.forEach(function(d,k){if(k!==i)d.all.forEach(function(it){itemSet(it,false);});});mApply();}
 function findStep(it){for(var di=0;di<days.length;di++){var st=days[di].steps;for(var si=0;si<st.length;si++){var s=st[si];if(s.type==='one'&&s.items[0]===it)return [di,si,0];if(s.type==='opt'){var k=s.items.indexOf(it);if(k>=0)return [di,si,k];}}}return null;}
 function selectStep(it,fly){
-  if(it&&it.optRef){selectStep(it.optRef,fly);return;} // click en ida/regreso → selecciona su opción
-  var f=findStep(it);
+  // ida/regreso de comida = tramos seleccionables por sí solos (elemento suelto)
+  var f=it&&it.optRef?null:findStep(it);
   if(!f){ // elemento suelto: enciende, resalta y vuela sin cambiar de paso
     itemSet(it,true);setSel(it);map.closePopup();var ll=it.ll||(it.coordsLL&&L.latLng(it.coordsLL[0][0],it.coordsLL[0][1]));
     if(fly!==false&&ll){map.flyTo(ll,15,{duration:.5});setTimeout(function(){openPop(it);},520);}else openPop(it);return;}
@@ -497,6 +552,7 @@ document.getElementById('dbcopy').addEventListener('click',function(){var t=docu
   else{document.execCommand('copy');done();}});
 </script></body></html>"""
 
-open(SD + "/leaflet-viaje.html", "w", encoding="utf-8").write(HTML.replace("__DATA__", DATA))
+out = HTML.replace("__DATA__", DATA).replace("</style>", MODAL_CSS + "\n</style>", 1)
+open(SD + "/leaflet-viaje.html", "w", encoding="utf-8").write(out)
 s = open(SD + "/leaflet-viaje.html", encoding="utf-8").read()
 print("leaflet-viaje.html:", len(s) // 1024, "KB")
