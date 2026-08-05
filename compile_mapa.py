@@ -285,6 +285,32 @@ def build_day(day, idx):
                            "desc": hp.get("descripcion", ""), "hist": hp.get("informacion", ""),
                            "foto": foto(hp), "maps": hp.get("maps", ""),
                            "pop": render_place_modal(hk, hp, HOST, APP_URL)})
+    # TIEMPOS MUERTOS: hueco ≥20 min que sigue a una ACTIVIDAD REAL terminada (lugar/comida con
+    # duración) y antes de la próxima hora agendada. Los tránsitos sin duración explícita infieren
+    # su duración del próximo paso con hora (para no contar el viaje como tiempo libre).
+    gaps = []
+    cursor = None; cur_seqi = None; cur_real = False
+    for gi, gs in enumerate(steps):
+        gt = hm2min(gs.get("time")); gdu = dmin(gs.get("duration"))
+        is_real = ("location" in gs) or ("options" in gs) or ("transit" in gs)  # paso real (no una nota suelta)
+        is_plan = "options" in gs and any(isinstance(o, dict) and "steps" in o for o in gs.get("options", []))
+        if gt is not None:
+            if cursor is not None and cur_real and gt - cursor >= 20:
+                gaps.append({"seqi": cur_seqi + 0.5, "mins": gt - cursor,
+                             "desde": f"{cursor // 60 % 24:02d}:{cursor % 60:02d}",
+                             "hasta": f"{gt // 60 % 24:02d}:{gt % 60:02d}"})
+            if gdu == 0 and ("transit" in gs or is_plan):  # tránsito / fork de planes → llenar hasta el próximo paso con hora
+                for j in range(gi + 1, len(steps)):
+                    nt = hm2min(steps[j].get("time"))
+                    if nt is not None:
+                        if nt > gt:
+                            gdu = nt - gt
+                        break
+            cursor = gt + gdu; cur_seqi = gi; cur_real = is_real
+        elif cursor is not None:
+            cursor += gdu; cur_seqi = gi
+            if is_real:
+                cur_real = True
     # largo del día: del primer paso al último (no el commute time)
     if startTime and end_max is not None:
         endStr = f"{end_max // 60 % 24:02d}:{end_max % 60:02d}"
@@ -293,7 +319,7 @@ def build_day(day, idx):
         travelTxt = ""
     return {"key": f"d{idx}", "label": str(day.get("titulo", f"día {idx}")),
             "places": places, "segments": segments, "meals": meals, "infoTransits": info_transits,
-            "travelMin": travelMin, "travelTxt": travelTxt.strip(), "startTime": startTime}
+            "gaps": gaps, "travelMin": travelMin, "travelTxt": travelTxt.strip(), "startTime": startTime}
 
 new_days = [build_day(d, i) for i, d in enumerate(Y["days"])]
 osrm_save()   # persistir caché de rutas a pie

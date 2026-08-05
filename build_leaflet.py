@@ -62,6 +62,13 @@ HTML = r"""<!doctype html>
   .tm.fix{color:#b23a2a}.tm.est{color:#9a9188}
   .tm.warn{color:#fff;background:#c0392b;border-radius:5px;padding:0 4px}
   .it.conflict{background:#fdecea}
+  .gaprow{display:none;background:#faf6ee}
+  body.showgaps .gaprow{display:flex}
+  .gaprow .nm{font-style:italic;color:#96825f;font-weight:600}
+  .gaprow .ds{color:#b07e2e}
+  .gapic{flex:0 0 auto;color:#c8791f;font-size:13px;line-height:1.3}
+  .daybtns .gapbtn{background:#f4ecdd;color:#8a6d3b;border-color:#dcccab}
+  .daybtns .gapbtn.on{background:#c8791f;color:#fff;border-color:#c8791f}
   .lp{font-size:13px;max-width:270px}
   .lp .tt{font-weight:700;font-size:14px}.lp .tt a{color:inherit;text-decoration:none;border-bottom:1px dotted #b23a2a}
   .lp .meta{color:#8a7f72;font-weight:600;font-size:12px}
@@ -228,9 +235,13 @@ DATA.days.forEach(function(d){
   stops.concat(hoteles,restos,opall).forEach(function(it){it.layer=it.nogeo?null:placeMarker(it);});
   // trayectos SIN geometría (vuelo, monorriel interno, trámite): fila de panel, ubicados por seqi
   var infos=(d.infoTransits||[]).map(function(t){return {seg:true,info:true,seqi:t.seqi,title:t.title,durTxt:t.durTxt,trange:t.trange,fix:t.fix,mode:t.mode,color:t.color,time:t.time,coordsLL:t.coordsLL||null};});
+  // TIEMPOS MUERTOS: filas de "tiempo libre" entre pasos (toggle-ables), ubicados por seqi intermedio
+  var gaps=(d.gaps||[]).map(function(g){var h=Math.floor(g.mins/60),m=g.mins%60;
+    return {gap:true,seqi:g.seqi,mins:g.mins,trange:g.desde+'–'+g.hasta,title:'Tiempo libre',
+      durTxt:(h?h+' h ':'')+(m?m+' min':(h?'':'0 min'))};});
   // SECUENCIA: TODO ordenado estrictamente por seqi (nunca por geografía ni por hora)
   function _si(x){return (x&&x.seqi!=null)?x.seqi:99999;}
-  var seq=segs.concat(stops,hoteles,restos,meals,infos).filter(Boolean).sort(function(a,b){return _si(a)-_si(b);});
+  var seq=segs.concat(stops,hoteles,restos,meals,infos,gaps).filter(Boolean).sort(function(a,b){return _si(a)-_si(b);});
   // traslado acumulado hasta cada parada (recorriendo la secuencia)
   var acc=0;seq.forEach(function(it){if(it.seg&&!it.meal&&!it.info){acc+=it.dur||0;}else if(it.kind==='stop'){it.inc=acc;it.incTxt=fmtMin(acc);acc=0;}});
   function wkm(m){return m<1000?(Math.round(m/10)*10+' m'):((m/1000).toFixed(1)+' km');}
@@ -312,6 +323,13 @@ function volar(it){selectStep(it,true);}
 
 var tree=document.getElementById('tree'),daybtns=document.getElementById('daybtns'),dayEls=[];
 function mkRow(it){
+  if(it.gap){ // fila de TIEMPO MUERTO (oculta por defecto; el toggle la muestra)
+    var gr=document.createElement('div');gr.className='it gaprow';
+    gr.innerHTML='<span class="ck" style="visibility:hidden"></span><span class="gapic">⏳</span>'
+      +'<div class="bd"><div class="nm">Tiempo libre</div><div class="ds">'+esc(it.durTxt)+' sin agenda</div></div>'
+      +'<span class="tm est">'+esc(it.trange)+'</span>';
+    it._row=gr;return gr;
+  }
   var row=document.createElement('div');row.className='it'+(it.seg?(' rt'+(it.mode==='walk'?' walk':'')):'');
   var cb=document.createElement('input');cb.type='checkbox';cb.className='ck';it.cb=cb;
   var vis;
@@ -402,6 +420,10 @@ daybtns.appendChild(allb);
 var noneb=document.createElement('button');noneb.className='nonebtn';noneb.textContent='Ninguno';
 noneb.addEventListener('click',function(){days.forEach(function(d){d.all.forEach(function(it){itemSet(it,false);});});syncMasters();});
 daybtns.appendChild(noneb);
+var gapb=document.createElement('button');gapb.className='gapbtn';gapb.textContent='⏳ Tiempos muertos';
+gapb.title='Mostrar/ocultar los huecos sin agenda entre pasos';
+gapb.addEventListener('click',function(){var on=document.body.classList.toggle('showgaps');gapb.classList.toggle('on',on);});
+daybtns.appendChild(gapb);
 
 selectDay(0); // carga inicial: día 1 exclusivo con toda su geometría
 document.getElementById('fold').addEventListener('click',function(){document.getElementById('panel').classList.toggle('hidden');});
@@ -411,6 +433,7 @@ function isResto(it){return it&&!it.seg&&it.kind!=='stop'&&it.kind!=='hotel'&&it
 function buildStepsFor(day){
   var steps=[],i=0,seq=day.seq;
   while(i<seq.length){
+    if(seq[i].gap){i++;continue;} // los tiempos muertos no son pasos navegables
     if(seq[i].meal){var me=seq[i];steps.push({type:'opt',items:me.options,title:'🍴 '+mealLabel(me.time)+(me.time?(' · '+me.time):''),chosen:me.chosen,meal:me});i++;}
     else if(isResto(seq[i])){var opts=[];while(i<seq.length&&isResto(seq[i])){opts.push(seq[i]);i++;}
       steps.push({type:'opt',items:opts,title:'🍴 Comer',chosen:0});}

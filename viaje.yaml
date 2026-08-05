@@ -1778,7 +1778,7 @@ days:
   - {transit: d9-3, time: '09:10', title: '🚌 @[Bus 206](d9-3) desde @[Gion](gion) → **Sanjusangendo-mae** — 15 min (o taxis ×3 ¥900).'}
   - {location: sanjusangen-do, time: '09:30', title: '@[Sanjusangendo](sanjusangen-do) ★ — 1 h (abre 8:30, ¥600): las **1,001 Kannon** en el salón de 120 m.'}
   - {transit: d9-4, time: '10:30', title: '🚶 A Kyoto Station por Shichijo-dori — 15 min (o @[bus 206](d9-4)/208, 8 min).'}
-  - {time: '10:50', title: '**Comida temprana** — 1 h 15 en Porta / The Cube (hileras de restaurantes para grupos).>'}
+  - {time: '10:50', title: '**Comida temprana** — 1 h 15 en Porta / The Cube (hileras de restaurantes para grupos).'}
   - time: '10:50'
     title: Elige tu plan del día
     options:
@@ -1863,7 +1863,7 @@ days:
       - {location: wagyu-premium, precio: '¥8,000'}
       - {location: kitcho-arashiyama, precio: '~¥60,000'}
   - {time: '14:30', title: 'Bajada por el **camino de Sagano** — 45 min de callecitas, Adashino opcional.'}
-  - {time: '15:15', title: Tarde a elegir — 2 h. **👉 Desliza** para ver la opción kimono con su horario.>}
+  - {time: '15:15', title: Tarde a elegir — 2 h. **👉 Desliza** para ver la opción kimono con su horario.}
   - time: '15:15'
     title: Elige tu plan del día
     options:
@@ -1941,7 +1941,7 @@ days:
   - {transit: d11-6, time: '15:40', title: '🚶 Nijojo-mae → **@[Tozai Line](d11-6)** → Higashiyama — 12 min directo (la ceremonia de té es en Higashiyama/Gion).'}
   - {transit: d11-e14, hidden-summary: true, title: 🚶 Higashiyama → Palacio Imperial de Kioto}
   - {location: palacio-imperial-de-kioto, time: '16:00', title: '**Opción A de Juan: ceremonia de té privada para 10** — ~¥3,500–5,000 pp, 1 h (reservar YA, para 10 se aparta con semanas). Subgrupo B: @[Palacio Imperial](palacio-imperial-de-kioto) ★ (gratis, último acceso 16:20) o Teramachi libre.'}
-  - {time: '18:30', title: '**Cena de despedida de Kioto** — 2 h (desde Gion, la cena queda a 10 min a pie), mesa de 10 RESERVADA.>'}
+  - {time: '18:30', title: '**Cena de despedida de Kioto** — 2 h (desde Gion, la cena queda a 10 min a pie), mesa de 10 RESERVADA.'}
   - time: '18:30'
     title: Elige tu plan del día
     options:
@@ -2286,7 +2286,7 @@ days:
   - {transit: d17-e12, hidden-summary: true, title: 🚶 Zōjō-ji → Kamiyachō}
   - {location: torre-de-tokio, time: '12:20', title: '@[Torre de Tokio](torre-de-tokio) ★ + @[Zojoji](zojo-ji) ★ — 1 h 30: la torre roja con el templo enfrente. Torre y Zojoji están uno frente al otro — sin conmutación.'}
   - {transit: d17-7, time: '13:50', title: '🚶 De regreso a Ginza para comer: **Kamiyacho** → @[Hibiya Line](d17-7) → @[Ginza](ginza) — 12 min.'}
-  - {time: '14:00', title: '**Comida** — 1 h 15.>'}
+  - {time: '14:00', title: '**Comida** — 1 h 15.'}
   - time: '14:00'
     title: Elige tu plan del día
     options:
