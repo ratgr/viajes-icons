@@ -48,6 +48,11 @@ data = yaml.safe_load(open(SRC, encoding="utf-8"))
 PLACES = data.get("places", {})
 LINEAS = data.get("lineas", {})
 TRANSITS = data.get("transits", {})
+_LINE_N = {v.get("nombre"): v for v in LINEAS.values() if v.get("frecuencia")}
+_LINE_C = {v.get("chip"): v for v in LINEAS.values() if v.get("frecuencia") and v.get("chip")}
+def _line_meta(tr):
+    l = _LINE_N.get(tr.get("linea")) or _LINE_C.get(tr.get("chip")) or {}
+    return {k: l[k] for k in ("frecuencia", "primer_tren", "ultimo_tren", "frecuencia_fuente") if l.get(k)}
 
 # ---- markdown mínimo + extensión @[alt](clave) --------------------
 REF_RE = re.compile(r"@\[(.+?)\]\((.+?)\)")
@@ -199,7 +204,7 @@ def render_modal(key):
         # identidad copiada en el propio transit (no compartida)
         ident = {"nombre": tr.get("linea", key), "nombre_jp": tr.get("nombre_jp", ""),
                  "chip": tr.get("chip", ""), "color": tr.get("color", "#555"),
-                 "reconoce": tr.get("reconoce", "")}
+                 "reconoce": tr.get("reconoce", ""), **_line_meta(tr)}
         ride = {k: tr[k] for k in ("anden", "reverso", "estaciones", "vehiculo") if k in tr}
         st = TRANSIT_STEP.get(key, {})
         horario = None

@@ -34,6 +34,9 @@ def render_place_modal(key, pl, foto_base, plan_url=None):
         out.append(f"<p>{md(pl['descripcion'])}</p>")
     if pl.get("informacion"):
         out.append(f'<p class="cmodal-info">{md(pl["informacion"])}</p>')
+    if pl.get("horario"):
+        src = ' <span style="opacity:.55;font-size:11px">· Google Maps</span>' if pl.get("horario_fuente") == "maps" else ""
+        out.append(f'<p class="cmodal-info">🕒 <b>Horario:</b> {html.escape(str(pl["horario"]))}{src}</p>')
     btns = []
     if pl.get("maps"):
         btns.append(f'<a class="mbtn" href="{html.escape(pl["maps"])}" target="_blank" rel="noopener">Abrir en Maps ↗</a>')
@@ -67,6 +70,17 @@ def render_line_modal(key, ident, ride=None, guia=None, horario=None, soft="#7a7
     h.append(f'<div style="background:{color};color:#fff;border-radius:10px;padding:14px 12px;'
              f'text-align:center;margin-bottom:12px"><div style="font-size:26px;font-weight:700;'
              f'line-height:1.2">{jp}</div>{chiphtml}</div>')
+    if ident.get("frecuencia"):
+        row = f'🔄 Pasa <b>{html.escape(str(ident["frecuencia"]))}</b>'
+        if ident.get("primer_tren") or ident.get("ultimo_tren"):
+            row += (f' · 🚉 {html.escape(str(ident.get("primer_tren","")))}'
+                    f'–{html.escape(str(ident.get("ultimo_tren","")))}')
+        src = ident.get("frecuencia_fuente")
+        mb = "2px" if src else "12px"
+        h.append(f'<p style="margin:-4px 0 {mb};text-align:center;color:{soft};font-size:13px">{row}</p>')
+        if src:
+            h.append(f'<div style="text-align:center;margin:0 0 12px"><a href="{html.escape(str(src))}" '
+                     f'target="_blank" rel="noopener" style="color:{soft};opacity:.7;font-size:11px">horario oficial ↗</a></div>')
     # renglón de horario: Sale {desde} · origen → destino · Llega {hasta}
     if horario and (horario.get("desde") or horario.get("hasta")):
         o = html.escape(str(horario.get("origen", "")))

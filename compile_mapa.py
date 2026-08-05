@@ -71,6 +71,12 @@ SD = os.path.dirname(os.path.abspath(__file__))
 Y = yaml.safe_load(open(SD + "/viaje.yaml", encoding="utf-8"))
 PLACES = Y.get("places", {})
 TRANSITS = Y.get("transits", {})
+LINEAS = Y.get("lineas", {})
+_LINE_N = {v.get("nombre"): v for v in LINEAS.values() if v.get("frecuencia")}
+_LINE_C = {v.get("chip"): v for v in LINEAS.values() if v.get("frecuencia") and v.get("chip")}
+def line_meta(tr):
+    l = _LINE_N.get(tr.get("linea")) or _LINE_C.get(tr.get("chip")) or {}
+    return {k: l[k] for k in ("frecuencia", "primer_tren", "ultimo_tren", "frecuencia_fuente") if l.get(k)}
 HOST = "https://raw.githubusercontent.com/ratgr/viajes-icons/main/"
 APP_URL = "https://ratgr.github.io/viajes-icons/app/japon.html"
 EMOJI = {"train": "🚇", "walk": "🚶", "monorail": "🚝", "flight": "✈️", "tramite": "🧳"}
@@ -207,7 +213,8 @@ def build_day(day, idx):
                    "dur": dur, "durTxt": "~" + str(s.get("duration", "")), "trange": trng(s)}
             if tr and tr.get("nombre_jp"):   # tren → popup rico (guía de línea + ride + horario)
                 ident = {"nombre": tr.get("linea", s["transit"]), "nombre_jp": tr["nombre_jp"],
-                         "chip": tr.get("chip", ""), "color": color, "reconoce": tr.get("reconoce", "")}
+                         "chip": tr.get("chip", ""), "color": color, "reconoce": tr.get("reconoce", ""),
+                         **line_meta(tr)}
                 ride = {kk: tr[kk] for kk in ("anden", "reverso", "estaciones", "vehiculo") if kk in tr}
                 horario = {"origen": tr["estaciones"][0][2], "destino": tr["estaciones"][-1][2],
                            "desde": str(s.get("time", "")), "hasta": add_min(s.get("time"), dur)}
@@ -229,7 +236,7 @@ def build_day(day, idx):
                             if tr.get("nombre_jp"):
                                 ident = {"nombre": tr.get("linea", ss["transit"]), "nombre_jp": tr["nombre_jp"],
                                          "chip": tr.get("chip", ""), "color": tr.get("color", "#555"),
-                                         "reconoce": tr.get("reconoce", "")}
+                                         "reconoce": tr.get("reconoce", ""), **line_meta(tr)}
                                 ride = {kk: tr[kk] for kk in ("anden", "reverso", "estaciones", "vehiculo") if kk in tr}
                                 e["pop"] = render_line_modal(ss["transit"], ident, ride, tr.get("guia"))
                             elems.append(e)
