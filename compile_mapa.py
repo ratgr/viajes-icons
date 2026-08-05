@@ -168,9 +168,9 @@ def build_day(day, idx):
             if k == "stop":
                 stopN += 1
                 nm = f"{stopN}. {s.get('time','')} · {pl['nombre']} (d4)"
-                places.append({"name": nm, "kind": "stop", "lat": la, "lng": lo,
+                places.append({"name": nm, "kind": "stop", "lat": la, "lng": lo, "seqi": i,
                                "order": stopN, "fixTime": bool(s.get("fixed")), "trange": trng(s)})
-                places.append({"name": pl["nombre"], "kind": "site", "lat": la, "lng": lo,
+                places.append({"name": pl["nombre"], "kind": "site", "lat": la, "lng": lo, "seqi": i,
                                "tier": "", "key": key, "desc": pl.get("descripcion", ""),
                                "fix": bool(s.get("fixed")), "trange": trng(s),
                                "hist": pl.get("informacion", ""), "foto": foto(pl),
@@ -178,7 +178,7 @@ def build_day(day, idx):
                                "pop": render_place_modal(key, pl, HOST, APP_URL)})
             else:
                 emo = "✈️" if k == "aero" else "🏨"
-                places.append({"name": f"{emo} {pl['nombre']}", "kind": k, "lat": la, "lng": lo,
+                places.append({"name": f"{emo} {pl['nombre']}", "kind": k, "lat": la, "lng": lo, "seqi": i,
                                "tier": "", "fix": bool(s.get("fixed")),
                                "time": str(s.get("time", "")), "trange": trng(s),
                                "desc": pl.get("descripcion", ""), "hist": pl.get("informacion", ""),
@@ -191,7 +191,7 @@ def build_day(day, idx):
             coords_src = tr.get("coords") if tr else s.get("coords")
             if not coords_src:
                 # sin geometría alguna → fila del panel (lateral), sin línea
-                info_transits.append({"title": s.get("title", ""), "durTxt": str(s.get("duration", "")),
+                info_transits.append({"title": s.get("title", ""), "durTxt": str(s.get("duration", "")), "seqi": i,
                                       "time": str(s.get("time", "")), "trange": trng(s), "fix": bool(s.get("fixed")),
                                       "mode": mode, "color": (tr or s).get("color") or "#9aa0a6"})
                 continue
@@ -207,7 +207,7 @@ def build_day(day, idx):
                 ab = re.sub(r"^[^\w]+", "", s.get("title", "")).strip()
             if not off:
                 travelMin += dur
-            seg = {"name": f"d{idx + 1}·{segN} {EMOJI.get(mode,'•')} {ab}",
+            seg = {"name": f"d{idx + 1}·{segN} {EMOJI.get(mode,'•')} {ab}", "seqi": i,
                    "color": color, "mode": mode, "coords": coords, "off": off,
                    "fix": bool(s.get("fixed")),
                    "dur": dur, "durTxt": "~" + str(s.get("duration", "")), "trange": trng(s)}
@@ -247,7 +247,7 @@ def build_day(day, idx):
                             elems.append({"pt": [la, lo], "color": "#b23a2a", "name": pl["nombre"],
                                           "pop": render_place_modal(ss["location"], pl, HOST, APP_URL)})
                 popts.append({"name": plan.get("title", ""), "elems": elems})
-            meals.append({"plan": True, "time": str(s.get("time", "")), "trange": trng(s), "fix": bool(s.get("fixed")), "options": popts})
+            meals.append({"plan": True, "seqi": i, "time": str(s.get("time", "")), "trange": trng(s), "fix": bool(s.get("fixed")), "options": popts})
             continue
         elif "options" in s:
             # opt-in: ida (del punto anterior) y regreso (al SIGUIENTE punto), rutas reales OSRM
@@ -273,14 +273,14 @@ def build_day(day, idx):
                     else:                                                # genérica sin lugar fijo → solo fila de panel
                         opt["nogeo"] = True
                     opts.append(opt)
-            meals.append({"time": str(s.get("time", "")), "trange": trng(s), "fix": bool(s.get("fixed")), "opts": opts})
+            meals.append({"seqi": i, "time": str(s.get("time", "")), "trange": trng(s), "fix": bool(s.get("fixed")), "opts": opts})
     # marcador del hotel donde se DUERME esa noche (aunque no sea un paso explícito del día)
     hk = HOTEL_BY_DAY.get(idx)
     if hk and not any(p.get("kind") == "hotel" for p in places):
         hp = PLACES.get(hk, {})
         if hp.get("gps"):
             hla, hlo = latlng(hp["gps"])
-            places.append({"name": f"🏨 {hp['nombre']}", "kind": "hotel", "lat": hla, "lng": hlo,
+            places.append({"name": f"🏨 {hp['nombre']}", "kind": "hotel", "lat": hla, "lng": hlo, "seqi": 9990,
                            "tier": "", "time": "", "trange": "",
                            "desc": hp.get("descripcion", ""), "hist": hp.get("informacion", ""),
                            "foto": foto(hp), "maps": hp.get("maps", ""),

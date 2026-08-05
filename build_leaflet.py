@@ -193,7 +193,7 @@ function segLayer(seg){
 var days=[];
 DATA.days.forEach(function(d){
   var stops=d.places.filter(function(p){return p.kind==='stop';})
-    .map(function(p){return {kind:'stop',num:p.order,title:stopClean(p.name),time:stopTime(p.name),trange:p.trange,
+    .map(function(p){return {kind:'stop',num:p.order,seqi:p.seqi,title:stopClean(p.name),time:stopTime(p.name),trange:p.trange,
       desc:'',tier:'',maps:'https://www.google.com/maps/search/?api=1&query='+p.lat+','+p.lng,foto:'',hist:'',
       color:'#b23a2a',ll:L.latLng(p.lat,p.lng),inc:0,fixTime:p.fixTime};})
     .sort(function(a,b){return a.num-b.num;});
@@ -202,54 +202,37 @@ DATA.days.forEach(function(d){
   d.places.filter(function(p){return p.kind!=='stop';}).forEach(function(p){
     var s=byNorm[norm(p.name)];
     if(s&&p.kind==='site'){s.desc=p.desc;s.maps=p.maps;s.foto=p.foto;s.hist=p.hist;s.pop=p.pop;return;}
-    var it={kind:p.kind,num:0,title:p.name,time:p.time||'',trange:p.trange,fixTime:p.time||'',desc:p.desc,tier:p.tier,foto:p.foto,hist:p.hist,key:p.key||'',
+    var it={kind:p.kind,num:0,seqi:p.seqi,title:p.name,time:p.time||'',trange:p.trange,fixTime:p.time||'',desc:p.desc,tier:p.tier,foto:p.foto,hist:p.hist,key:p.key||'',
       pop:p.pop,maps:p.maps,color:pColor(p.kind,p.tier),ll:L.latLng(p.lat,p.lng)};
     (p.kind==='hotel'||p.kind==='aero')?hoteles.push(it):restos.push(it);
   });
   var segs=d.segments.map(function(s){var e=segEnds(s.name),cd=s.coords;return {seg:true,layer:segLayer(s),
     name:s.name,title:(e?(e.a+' → '+e.b):s.name),color:s.color,durTxt:s.durTxt,distTxt:s.distTxt,dur:s.dur||0,mode:s.mode,coordsLL:cd,
-    off:!!s.off,trange:s.trange,pop:s.pop,
+    off:!!s.off,trange:s.trange,pop:s.pop,seqi:s.seqi,fix:s.fix,
     ord:parseInt((/·(\d+)/.exec(s.name)||[0,'999'])[1],10),end:L.latLng(cd[cd.length-1][0],cd[cd.length-1][1])};});
   segs.sort(function(a,b){return a.ord-b.ord;});
   segs.forEach(function(it){[it.layer._hit,it.layer._pop].forEach(function(ln){if(ln)ln.on('click',function(){selectStep(it,false);});});}); // clic en ruta = seleccionarla
-  // cada parada va TRAS el tramo que llega a ella (fin del tramo más cercano)
-  stops.forEach(function(st){var best=-1,bd=1e12;segs.forEach(function(sg,i){var dd=st.ll.distanceTo(sg.end);if(dd<bd){bd=dd;best=i;}});st.arr=best;});
-  var arrMap={};stops.forEach(function(st){(arrMap[st.arr]=arrMap[st.arr]||[]).push(st);});
-  // tiempo de traslado acumulado hasta cada parada (· ~X min)
-  var acc=0;segs.forEach(function(sg,i){acc+=sg.dur;if(arrMap[i]){arrMap[i].forEach(function(st){st.inc=acc;st.incTxt=fmtMin(acc);});acc=0;}});
-  // comidas por hora: cada una es un grupo de opciones (marcadores propios)
+  // (orden estricto por seqi más abajo; el acumulado de traslado se calcula al recorrer seq)
+  // comidas: cada una es un grupo de opciones (marcadores propios)
   var meals=(d.meals||[]).map(function(me){
-    if(me.plan){return {meal:true,plan:true,time:me.time,trange:me.trange,options:me.options,chosen:0};} // planes en paralelo
+    if(me.plan){return {meal:true,plan:true,seqi:me.seqi,time:me.time,trange:me.trange,fix:me.fix,options:me.options,chosen:0};} // planes en paralelo
     var opts=me.opts.map(function(o){var it={kind:'resto',num:0,title:o.name,time:me.time||'',desc:o.desc,tier:o.tier,foto:o.foto,hist:'',
       key:o.key,mealt:me.time,pop:o.pop,maps:o.maps,ida:o.ida,reg:o.reg,price:o.price,nogeo:!!o.nogeo,color:pColor('resto',o.tier),
       ll:o.nogeo?null:L.latLng(o.lat,o.lng)};return it;});
-    return {meal:true,time:me.time,trange:me.trange,options:opts,chosen:0};
+    return {meal:true,seqi:me.seqi,time:me.time,trange:me.trange,fix:me.fix,options:opts,chosen:0};
   });
   var mkeys={};meals.forEach(function(me){me.options.forEach(function(o){if(o.key)mkeys[o.key]=1;});});
   restos=restos.filter(function(r){return !(r.key&&mkeys[r.key]);}); // los que ya son opción de comida salen de "sueltos"
   // marcadores (tras calcular inc, para el meta del popup)
   var opall=[];meals.forEach(function(me){opall=opall.concat(me.options);});
   stops.concat(hoteles,restos,opall).forEach(function(it){it.layer=it.nogeo?null:placeMarker(it);});
-  // secuencia intercalada: hotel → (tramos… parada)… → comidas por hora → restaurantes sueltos
-  // ubicar hoteles/aeropuertos por su conexión a las rutas (no todos al inicio)
-  var farS=[],farE=[],beforeSeg={},afterSeg={};
-  hoteles.forEach(function(h){
-    var bI=-1,bD=1e12,bSide='start';
-    segs.forEach(function(sg,i){var A=L.latLng(sg.coordsLL[0][0],sg.coordsLL[0][1]),da=h.ll.distanceTo(A),db=h.ll.distanceTo(sg.end);
-      if(da<bD){bD=da;bI=i;bSide='start';}if(db<bD){bD=db;bI=i;bSide='end';}});
-    if(bI<0||bD>30000){farS.push(h);} // lejos de toda ruta → aeropuerto de salida (inicio del día)
-    else if(bSide==='start')(beforeSeg[bI]=beforeSeg[bI]||[]).push(h);
-    else (afterSeg[bI]=afterSeg[bI]||[]).push(h);
-  });
-  var seq=[],added={};
-  farS.forEach(function(h){seq.push(h);}); // aeropuerto de salida primero
-  segs.forEach(function(sg,i){
-    (beforeSeg[i]||[]).forEach(function(h){seq.push(h);}); // origen del tramo (aeropuerto de llegada)
-    seq.push(sg);
-    if(arrMap[i])arrMap[i].forEach(function(st){seq.push(st);added[st.num]=1;});
-    (afterSeg[i]||[]).forEach(function(h){seq.push(h);}); // destino del tramo (hotel al llegar)
-  });
-  stops.forEach(function(st){if(!added[st.num])seq.push(st);});
+  // trayectos SIN geometría (vuelo, monorriel interno, trámite): fila de panel, ubicados por seqi
+  var infos=(d.infoTransits||[]).map(function(t){return {seg:true,info:true,seqi:t.seqi,title:t.title,durTxt:t.durTxt,trange:t.trange,fix:t.fix,mode:t.mode,color:t.color,time:t.time,coordsLL:t.coordsLL||null};});
+  // SECUENCIA: TODO ordenado estrictamente por seqi (nunca por geografía ni por hora)
+  function _si(x){return (x&&x.seqi!=null)?x.seqi:99999;}
+  var seq=segs.concat(stops,hoteles,restos,meals,infos).filter(Boolean).sort(function(a,b){return _si(a)-_si(b);});
+  // traslado acumulado hasta cada parada (recorriendo la secuencia)
+  var acc=0;seq.forEach(function(it){if(it.seg&&!it.meal&&!it.info){acc+=it.dur||0;}else if(it.kind==='stop'){it.inc=acc;it.incTxt=fmtMin(acc);acc=0;}});
   function wkm(m){return m<1000?(Math.round(m/10)*10+' m'):((m/1000).toFixed(1)+' km');}
   function wmin(m){return Math.max(5,Math.round(m/66.7/5)*5);} // 4 km/h (66.7 m/min)
   function lineDist(cs){var d=0;for(var i=1;i<cs.length;i++){d+=L.latLng(cs[i-1][0],cs[i-1][1]).distanceTo(L.latLng(cs[i][0],cs[i][1]));}return d;}
@@ -270,16 +253,12 @@ DATA.days.forEach(function(d){
           o.parts.push(part);mroutes.push(part);lyr.on('click',function(){selectStep(part,false);});
         });
       });
-      var pp=seq.length;
-      for(var pk=seq.length-1;pk>=0;pk--){var pv2=seq[pk];if(pv2&&!pv2.meal&&pv2.time&&/^\d\d:\d\d$/.test(pv2.time)&&me.time&&pv2.time<=me.time){pp=pk+1;break;}}
-      seq.splice(pp,0,me);
       return;
     }
-    // ubicar la comida en su hora: TRAS la última parada cuya hora <= la de la comida (cronológico)
-    var pos=seq.length;
-    for(var pi=seq.length-1;pi>=0;pi--){var pit=seq[pi];if(pit&&!pit.meal&&pit.time&&/^\d\d:\d\d$/.test(pit.time)&&me.time&&pit.time<=me.time){pos=pi+1;break;}}
-    var fromLL=null;for(var j=pos-1;j>=0;j--){var pv=seq[j];if(pv&&!pv.meal&&pv.ll){fromLL=pv.ll;break;}}
-    var toLL=null;for(var j2=pos;j2<seq.length;j2++){var nx=seq[j2];if(nx&&!nx.meal){if(nx.ll){toLL=nx.ll;break;}if(nx.seg&&!nx.off&&nx.coordsLL){toLL=L.latLng(nx.coordsLL[0][0],nx.coordsLL[0][1]);break;}}}
+    // la comida ya está posicionada por seqi; sus vecinos dan el punto de ida/regreso
+    var idx=seq.indexOf(me);
+    var fromLL=null;for(var j=idx-1;j>=0;j--){var pv=seq[j];if(pv&&!pv.meal&&pv.ll){fromLL=pv.ll;break;}}
+    var toLL=null;for(var j2=idx+1;j2<seq.length;j2++){var nx=seq[j2];if(nx&&!nx.meal){if(nx.ll){toLL=nx.ll;break;}if(nx.seg&&!nx.off&&nx.coordsLL){toLL=L.latLng(nx.coordsLL[0][0],nx.coordsLL[0][1]);break;}}}
     me.fromLL=fromLL;me.toLL=toLL;
     me.options.forEach(function(o){
       o.parts=[];
@@ -298,15 +277,6 @@ DATA.days.forEach(function(d){
         var reg={seg:true,layer:pl2,optRef:o,title:'regreso → siguiente',color:'#c8791f',mode:'walk',durTxt:'~'+wmin(mv)+' min',distTxt:wkm(mv),mealt:me.time,coordsLL:regC};
         o.reg=reg;o.parts.push(reg);mroutes.push(reg);pl2.on('click',function(){selectStep(reg,false);});}
     });
-    seq.splice(pos,0,me);
-  });
-  restos.forEach(function(r){seq.push(r);});
-  farE.forEach(function(h){seq.push(h);}); // aeropuerto de regreso al final
-  // trayectos SIN geometría (vuelo, monorriel interno, trámite): solo fila de panel, ubicados por hora
-  (d.infoTransits||[]).forEach(function(t){
-    var it={seg:true,info:true,title:t.title,durTxt:t.durTxt,trange:t.trange,mode:t.mode,color:t.color,time:t.time,coordsLL:t.coordsLL||null};
-    var pos=0;for(var pi=seq.length-1;pi>=0;pi--){var pv=seq[pi];if(pv&&pv.time&&/^\d\d:\d\d$/.test(pv.time)&&t.time&&pv.time<=t.time){pos=pi+1;break;}}
-    seq.splice(pos,0,it);
   });
   days.push({key:d.key,label:d.label,travelTxt:d.travelTxt,startTime:d.startTime||'',seq:seq,restos:restos,meals:meals,all:stops.concat(hoteles,restos,segs,opall,mroutes)});
 });
@@ -458,6 +428,30 @@ var mDay=0,mStep=0;
 function dSteps(){return days[mDay].steps;}
 function mCur(){var s=dSteps()[mStep];return s.type==='one'?s.items[0]:s.items[s.chosen];}
 function openPop(it){var L2=it&&it.layer;if(!L2)return;if(L2._popup)L2.openPopup();else if(L2._pop)L2._pop.openPopup(L2._mid);} // grupo (ruta) no tiene popup propio → abre el de su línea
+// límites del TRAZO del paso actual (tramo: su polilínea; comida: ida+lugar+regreso). null si es solo un punto.
+function stepBounds(cur){
+  var pts=[],hasLine=false;
+  function add(c){if(c&&c.length){hasLine=true;for(var i=0;i<c.length;i++)pts.push(c[i]);}}
+  if(cur.coordsLL)add(cur.coordsLL);
+  if(cur.parts)cur.parts.forEach(function(p){if(p.coordsLL)add(p.coordsLL);});
+  if(cur.ll)pts.push([cur.ll.lat,cur.ll.lng]);
+  return hasLine?L.latLngBounds(pts):null;
+}
+// centrado de un LUGAR (sin trazo propio): círculo centrado en el lugar cuyo radio depende de los
+// tramos vecinos — d1/d2 = distancia del lugar al extremo lejano del tramo anterior/siguiente;
+// radio = máx( media geométrica de los dos, el más chico duplicado ). Encuadra ese círculo.
+function placeCircleBounds(cur,seq){
+  if(!cur.ll)return null;
+  var idx=seq.indexOf(cur);if(idx<0)return null;
+  var pv=null,nx=null,it,c;
+  for(var i=idx-1;i>=0;i--){it=seq[i];if(it&&it.seg&&!it.info&&it.coordsLL&&it.coordsLL.length){c=it.coordsLL;pv=L.latLng(c[0][0],c[0][1]);break;}}
+  for(var j=idx+1;j<seq.length;j++){it=seq[j];if(it&&it.seg&&!it.info&&it.coordsLL&&it.coordsLL.length){c=it.coordsLL;nx=L.latLng(c[c.length-1][0],c[c.length-1][1]);break;}}
+  var d1=pv?cur.ll.distanceTo(pv):null,d2=nx?cur.ll.distanceTo(nx):null,R;
+  if(d1!=null&&d2!=null)R=Math.max(Math.sqrt(d1*d2),2*Math.min(d1,d2));
+  else if(d1!=null)R=2*d1;else if(d2!=null)R=2*d2;else return null;
+  R=Math.max(R,90); // piso para no acercar de más en lugares muy pegados a sus tramos
+  return cur.ll.toBounds(2*R); // caja de lado 2R (±R alrededor del lugar)
+}
 function mApply(fly){
   var day=days[mDay],s=dSteps()[mStep];
   map.closePopup(); // cerrar el popup anterior al movernos
@@ -470,8 +464,12 @@ function mApply(fly){
   syncMasters();
   var cur=mCur(),ll=cur.ll||(cur.layer&&cur.layer._pts&&cur.layer._pts[0]);
   setSel(cur); // resaltar la ruta/lugar actual
-  if(fly!==false&&ll){map.flyTo(ll,cur.seg?14:16,{duration:.5});setTimeout(function(){openPop(cur);},520);}
-  else openPop(cur); // abrir popup también en click (lugares y rutas)
+  if(fly!==false){
+    var b=stepBounds(cur)||placeCircleBounds(cur,day.seq); // trazo del paso, o círculo del lugar según tramos vecinos
+    if(b&&b.isValid())map.flyToBounds(b,{padding:[60,72],maxZoom:16,duration:.5});
+    else if(ll)map.flyTo(ll,16,{duration:.5}); // sin trazo ni vecinos → centra el punto
+    setTimeout(function(){openPop(cur);},520);
+  } else openPop(cur); // abrir popup también en click (lugares y rutas)
   mRender();
 }
 function mRender(){
@@ -496,7 +494,7 @@ function selectStep(it,fly){
   var f=it&&it.optRef?null:findStep(it);
   if(!f){ // elemento suelto: enciende, resalta y vuela sin cambiar de paso
     itemSet(it,true);setSel(it);map.closePopup();var ll=it.ll||(it.coordsLL&&L.latLng(it.coordsLL[0][0],it.coordsLL[0][1]));
-    if(fly!==false&&ll){map.flyTo(ll,15,{duration:.5});setTimeout(function(){openPop(it);},520);}else openPop(it);return;}
+    if(fly!==false){var b=stepBounds(it);if(b&&b.isValid())map.flyToBounds(b,{padding:[60,72],maxZoom:16,duration:.5});else if(ll)map.flyTo(ll,15,{duration:.5});setTimeout(function(){openPop(it);},520);}else openPop(it);return;}
   mDay=f[0];mStep=f[1];var s=dSteps()[mStep];if(s.type==='opt')s.chosen=f[2];if(isMob())days.forEach(function(d,k){if(k!==mDay)d.all.forEach(function(x){itemSet(x,false);});});mApply(fly);}
 function dayPicker(){
   var menu=document.createElement('div');menu.className='daymenu';
