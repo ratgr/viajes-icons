@@ -35,7 +35,13 @@ def render_place_modal(key, pl, foto_base, plan_url=None):
     if pl.get("informacion"):
         out.append(f'<p class="cmodal-info">{md(pl["informacion"])}</p>')
     if pl.get("horario"):
-        src = ' <span style="opacity:.55;font-size:11px">· Google Maps</span>' if pl.get("horario_fuente") == "maps" else ""
+        hf = str(pl.get("horario_fuente", ""))
+        if hf == "maps":
+            src = ' <span style="opacity:.55;font-size:11px">· Google Maps</span>'
+        elif hf.startswith("http"):
+            src = f' <a href="{html.escape(hf)}" target="_blank" rel="noopener" style="opacity:.6;font-size:11px">fuente ↗</a>'
+        else:
+            src = ""
         out.append(f'<p class="cmodal-info">🕒 <b>Horario:</b> {html.escape(str(pl["horario"]))}{src}</p>')
     btns = []
     if pl.get("maps"):
