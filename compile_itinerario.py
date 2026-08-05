@@ -174,12 +174,17 @@ def render_place_modal(key, pl):
     nombre = html.escape(pl.get("nombre", key))
     out = [f'<div class="cmodal" id="m-{key}"><h3>{nombre}</h3>']
     if pl.get("imagen"):
-        out.append(f'<img src="{FOTO_BASE}{pl["imagen"]}" alt="{nombre}" loading="lazy" '
+        _im = pl["imagen"]
+        _src = _im if _im.startswith("http") else f"{FOTO_BASE}{_im}"   # URL absoluta (Maps) tal cual
+        out.append(f'<img src="{_src}" alt="{nombre}" loading="lazy" '
                    f'onerror="this.style.display=&#39;none&#39;">')
     if pl.get("descripcion"):
         out.append(f"<p>{md(pl['descripcion'])}</p>")
     if pl.get("informacion"):
         out.append(f'<p class="cmodal-info">{md(pl["informacion"])}</p>')
+    if pl.get("horario"):
+        src = ' <span style="opacity:.55;font-size:11px">· Google Maps</span>' if pl.get("horario_fuente") == "maps" else ""
+        out.append(f'<p class="cmodal-info">🕒 <b>Horario:</b> {html.escape(str(pl["horario"]))}{src}</p>')
     if pl.get("maps"):
         out.append(f'<a class="cmbtn" href="{html.escape(pl["maps"])}" target="_blank" rel="noopener">Abrir en Maps ↗</a>')
     out.append("</div>")
