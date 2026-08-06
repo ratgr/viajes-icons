@@ -60,6 +60,7 @@ HTML = r"""<!doctype html>
   .it .ds{font-size:10.5px;color:#7a7268;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .it .tm{font-size:11px;font-weight:700;font-variant-numeric:tabular-nums;flex:0 0 auto;padding-top:1px;white-space:nowrap}
   .tm.fix{color:#b23a2a}.tm.est{color:#9a9188}
+  .tm .to{color:#b23a2a}.tm .tf{color:#9a9188}
   .tm.warn{color:#fff;background:#c0392b;border-radius:5px;padding:0 4px}
   .it.conflict{background:#fdecea}
   .gaprow{display:none;background:#faf6ee}
@@ -338,9 +339,16 @@ function mkRow(it){
   else{vis='<span class="pin" style="background:'+it.color+'"></span>';}
   var ds=it.seg?[it.durTxt,it.distTxt].filter(Boolean).join(' · '):[it.tier,it.rtxt,it.desc].filter(Boolean).join(' · ');
   // badge de tiempo = inicio–fin SIEMPRE (nunca duración): rojo si obligatorio (reserva/fixed), gris si flexible
+  // badge inicio–fin: el ORIGEN es rojo si el paso es fijo (reserva/hora comprometida), el FIN siempre gris (flexible)
   var tlabel=it.trange||it.time;
   var tm='';
-  if(tlabel){var cls=it.conflict?'warn':((it.fix||it.fixTime)?'fix':'est');tm='<span class="tm '+cls+'">'+(it.conflict?'⚠️ ':'')+esc(tlabel)+'</span>';}
+  if(tlabel){
+    if(it.conflict){tm='<span class="tm warn">⚠️ '+esc(tlabel)+'</span>';}
+    else{var pr=String(tlabel).split(/\s[–—-]\s/);
+      if(pr.length===2){var oc=(it.fix||it.fixTime)?'to':'tf';
+        tm='<span class="tm"><span class="'+oc+'">'+esc(pr[0])+'</span><span class="tf"> – '+esc(pr[1])+'</span></span>';}
+      else{var cls=(it.fix||it.fixTime)?'fix':'est';tm='<span class="tm '+cls+'">'+esc(tlabel)+'</span>';}}
+  }
   if(it.info)cb.style.visibility='hidden';
   row.appendChild(cb);
   row.insertAdjacentHTML('beforeend',vis+'<div class="bd"><div class="nm">'+esc(it.title)+'</div>'+(ds?'<div class="ds">'+esc(ds)+'</div>':'')+'</div>'+tm);

@@ -1520,8 +1520,8 @@ days:
 
       ', cost: '¥1,200'}
   - {transit: castillo-tanimachi, time: '16:15', duration: 25 min, title: 🚶 Castillo → Tanimachi 4-chōme (salida sur)}
-  - {transit: metro-tanimachi, time: '16:30', duration: 5 min, title: '🚇 Tanimachi Line: @[Tanimachi 4-chōme → Tanimachi 9-chōme](metro-tanimachi)'}
-  - {transit: metro-sennichimae, time: '16:40', duration: 5 min, title: '🚇 Sennichimae Line: @[Tanimachi 9-chōme → Namba](metro-sennichimae) (salida 14)'}
+  - {transit: metro-tanimachi, time: '16:40', duration: 5 min, title: '🚇 Tanimachi Line: @[Tanimachi 4-chōme → Tanimachi 9-chōme](metro-tanimachi)'}
+  - {transit: metro-sennichimae, time: '16:45', duration: 5 min, title: '🚇 Sennichimae Line: @[Tanimachi 9-chōme → Namba](metro-sennichimae) (salida 14)'}
   - {transit: namba-nambayasaka, time: '16:50', duration: 15 min, title: 🚶 Namba → Namba Yasaka}
   - {location: namba-yasaka, time: '17:05', duration: 20 min, title: '@[Namba Yasaka](namba-yasaka) 🦁', note: La cabeza de león de 12 m que se traga la mala suerte — foto obligada.}
   - {transit: nambayasaka-hozenji, duration: 15 min, title: 🚶 Namba Yasaka → Hōzen-ji}
