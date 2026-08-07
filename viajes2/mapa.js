@@ -1252,21 +1252,58 @@
   }
   var devMode = false;
   var drawer = null;
-  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+  var devAuth = 'ok';   // 'ok' | 'required' — lo dice el ping del dev server
+  // el modo dev aparece cuando la página la SIRVE el dev server (localhost o
+  // túnel compartido): la sonda /api/ping decide, no el hostname — en Pages
+  // no hay server y el botón nunca existe
+  fetch('/api/ping').then(function (r) { return r.json(); }).then(function (p) {
+    if (!p || !p.ok) return;
+    devAuth = p.auth;
     var devBtn = document.createElement('button');
     devBtn.className = 'dev-toggle';
     devBtn.type = 'button';
     devBtn.textContent = '🛠';
-    devBtn.title = 'Modo dev: click en una fila = editar su YAML';
+    devBtn.title = p.auth === 'ok'
+      ? 'Modo dev: click en una fila = editar su YAML'
+      : 'Modo dev (pide iniciar sesión con GitHub)';
     document.body.appendChild(devBtn);
-    devMode = localStorage.getItem('mapa-dev') === '1';
+    devMode = p.auth === 'ok' && localStorage.getItem('mapa-dev') === '1';
     devBtn.classList.toggle('on', devMode);
     devBtn.addEventListener('click', function () {
+      if (devAuth !== 'ok') { devLogin(devBtn); return; }
       devMode = !devMode;
       localStorage.setItem('mapa-dev', devMode ? '1' : '0');
       devBtn.classList.toggle('on', devMode);
       if (!devMode) closeDrawer();
     });
+  }).catch(function () { /* sin dev server (Pages): nada que hacer */ });
+  // login por DEVICE FLOW: el server habla con GitHub; aquí solo se enseña el
+  // código y se sondea hasta que la sesión queda puesta (cookie)
+  function devLogin(devBtn) {
+    api('/api/login/start', {}).then(function (d) {
+      if (!d.ok) { alert('login: ' + d.error); return; }
+      window.open(d.verification_uri, '_blank');
+      var box = document.createElement('div');
+      box.className = 'dev-login';
+      box.innerHTML = 'GitHub → <b>' + d.user_code + '</b> en ' +
+        '<a href="' + d.verification_uri + '" target="_blank" rel="noopener">' +
+        d.verification_uri + '</a> <span class="dev-login-state">esperando…</span>';
+      document.body.appendChild(box);
+      var iv = setInterval(function () {
+        api('/api/login/poll', { handle: d.handle }).then(function (p) {
+          if (p.pending) return;
+          clearInterval(iv);
+          if (p.ok) {
+            devAuth = 'ok';
+            box.querySelector('.dev-login-state').textContent = '✓ ' + p.user;
+            setTimeout(function () { box.remove(); }, 1500);
+            devBtn.title = 'Modo dev: click en una fila = editar su YAML';
+          } else {
+            box.querySelector('.dev-login-state').textContent = '✗ ' + (p.error || 'falló');
+          }
+        }).catch(function () { clearInterval(iv); box.remove(); });
+      }, (d.interval || 5) * 1000);
+    }).catch(function (e) { alert('login: ' + e); });
   }
   function closeDrawer() {
     stopGeomEdit();
@@ -1446,6 +1483,8 @@
       '<textarea class="dev-step" spellcheck="false">cargando…</textarea>' +
       '<div class="dev-btns"><button class="dev-save" type="button">Guardar</button>' +
       '<button class="dev-rebuild" type="button">Rebuild</button>' +
+      '<button class="dev-deploy" type="button" ' +
+      'title="Rebuild + copiar a viajes-icons/viajes2 + push (Pages publica)">Deploy 🚀</button>' +
       '<button class="dev-close" type="button">Cancelar</button><span class="dev-msg"></span></div>' +
       '<div class="dev-btns dev-step-ops">' +
       '<button class="dev-add-before" type="button" title="Insertar un paso nuevo ANTES de esta fila">+ antes</button>' +
@@ -1647,6 +1686,16 @@
       api('/api/step', { day: +m[1], step: +m[2], sub: sub, yaml: ta.value })
         .then(function (d) {
           msg.textContent = d.ok ? 'guardado ✓ (pendiente rebuild)' : 'error: ' + d.error;
+        })
+        .catch(function (e) { msg.textContent = 'error: ' + e; });
+    });
+    drawer.querySelector('.dev-deploy').addEventListener('click', function () {
+      msg.textContent = 'rebuild + deploy…';
+      api('/api/rebuild', { deploy: true })
+        .then(function (d) {
+          if (!d.ok) { msg.textContent = 'error: ' + d.error; return; }
+          msg.textContent = 'desplegado ✓ — recargando…';
+          setTimeout(function () { location.reload(); }, 600);
         })
         .catch(function (e) { msg.textContent = 'error: ' + e; });
     });

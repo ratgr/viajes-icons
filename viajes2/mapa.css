@@ -215,3 +215,7 @@ body.show-free .panel .steps > li[data-free]::after { content: '⏳ ' attr(data-
 
 /* pestañas de la app en la barra del mapa */
 .panel .app-tabs { padding: 0 0 6px; }
+
+/* aviso de login por device flow */
+.dev-login { position: fixed; bottom: 54px; right: 10px; z-index: 1300; background: var(--card); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,.3); padding: 10px 14px; font-size: 13px; }
+.dev-login b { font-size: 16px; letter-spacing: 2px; color: var(--shu); }
