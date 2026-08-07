@@ -1,0 +1,217 @@
+/* mapa.css — cromo del mapa SOBRE el markup del itinerario (no lo cambia):
+   disposición barra-lateral + mapa, filas compactas con casilla, días colapsables. */
+
+/* ---------- disposición: barra lateral + divisor arrastrable + mapa ---------- */
+html, body { height: 100%; }
+body { display: flex; padding: 0; overflow: hidden; }
+.panel { width: 380px; min-width: 260px; max-width: 70vw; flex: 0 0 auto; overflow-y: auto; padding: 0 14px 40px; background: var(--paper); }
+.splitter { flex: 0 0 5px; cursor: col-resize; background: var(--line); }
+.splitter:hover, .splitter.dragging { background: var(--shu); }
+#map { flex: 1; min-width: 0; }
+
+/* ---------- cabecera de la barra ---------- */
+.phead { padding: 10px 0 4px; }
+.phead h1 { font-family: "Palatino Linotype", Palatino, "Book Antiqua", serif; font-size: 16px; font-weight: 600; margin: 0; }
+.phead .sub { color: var(--ink-soft); font-size: 11.5px; margin: 2px 0 0; }
+.panel .day-nav { margin: 8px -14px 10px; }
+
+/* ---------- días colapsables (el caret y las casillas los pone mapa.js) ---------- */
+.panel .day { margin-top: 10px; }
+.panel section.day > ul.steps { display: none; }
+.panel section.day.open > ul.steps { display: block; }
+.panel .day-head { cursor: pointer; user-select: none; gap: 7px; padding-bottom: 4px; }
+.panel .day-head h3 { font-size: 13.5px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.panel .day-head .caret { color: var(--ink-soft); font-size: 10px; transition: transform .15s; flex: 0 0 auto; }
+.panel section.day.open .day-head .caret { transform: rotate(90deg); }
+.panel .day-head .note, .panel .day-head .anchor { display: none; }  /* no caben en 380px */
+
+/* ---------- filas compactas con casilla ----------
+   Rejilla: [casilla | hora | contenido | duración]. El div.body (y el span
+   .transit) se aplanan con display:contents: título al centro, duración
+   ARRIBA-DERECHA de la fila, rango DESDE–HASTA apilado a la izquierda. */
+.panel .steps > li { grid-template-columns: 16px 52px minmax(0, 1fr); gap: 2px 8px; padding: 4px 0; font-size: 12.5px; scroll-margin-top: 46px; position: relative; }
+.panel .steps > li > .ck { grid-column: 1; grid-row: 1; }
+.panel .steps > li > .time { grid-column: 2; grid-row: 1; font-size: 11px; }
+.panel .steps > li > .body, .panel .steps li .transit { display: contents; }
+.panel .steps li .title { grid-column: 3; grid-row: 1; }
+.panel .steps li .duration { position: absolute; top: 4px; right: 0; text-align: right; font-size: 10.5px; max-width: 96px; background: inherit; }
+.panel .steps li .title { padding-right: 74px; }   /* que el título no choque con la duración */
+.panel .steps li .options { grid-column: 1 / -1; grid-row: 3; }
+.panel .sep { display: none; }
+.panel .steps li .note { grid-column: 3; grid-row: 2; font-size: 11.5px; color: var(--ink-soft); padding-right: 74px; }
+/* Colores: explícita = verde · explícita y FIJA = rojo · calculada = gris */
+.panel .steps .time, .panel .steps li .duration { color: light-dark(#347132, #8fc07e); }
+.panel .steps .time.fixed { color: var(--shu); }
+.panel .steps .time .to, .panel .steps .time .from { display: block; font-weight: 400; color: var(--ink-soft); }
+/* el MAPA sí muestra la duración calculada (el itinerario la esconde) */
+.panel .steps li .duration[data-derived] { display: block; color: var(--ink-soft); }
+.panel .steps .time .warn { display: inline-block; cursor: help; font-size: 12px; }
+/* tiempo libre entre pasos (toggle ⏳): el hueco tras la fila, ancho completo */
+body.show-free .panel .steps > li[data-free]::after { content: '⏳ ' attr(data-free) ' min libres'; grid-column: 1 / -1; font-size: 10.5px; color: var(--ink-soft); font-style: italic; border-top: 1px dashed var(--line); padding-top: 2px; margin-top: 2px; }
+.panel .ck { margin: 3px 0 0; accent-color: var(--shu); }
+.panel .day-head .ck { margin: 0; align-self: center; }
+
+/* fila seleccionada (mapa.js) */
+.panel .steps > li { border-left: 3px solid transparent; padding-left: 2px; }
+.panel .steps > li:hover { border-left-color: var(--ai); background: var(--paper-2); cursor: pointer; }
+.panel .steps > li.sel { background: var(--shu-soft); border-left-color: var(--shu); }
+
+/* opciones de tier: en el mapa una por línea (el itinerario fluye inline) */
+.panel .options > li .option { display: block; padding: 1px 0; }
+.panel .option > .steps { display: block; margin: 2px 0 3px 16px; }
+.panel .option.closed > .steps { display: none; }
+.panel .option.closed .option-caret { transform: rotate(-90deg); }
+
+/* pasos solo-mapa (hidden-summary): el itinerario los oculta, el MAPA no —
+   son geometría; van atenuados para distinguirlos */
+.panel .steps li.hidden-summary { display: grid; opacity: .6; }
+.panel .steps li.hidden-summary .title { font-style: italic; font-weight: 400; }
+
+/* grupos de options: caret colapsa; click en el título selecciona TODA su geometría */
+.panel .options > li > b:first-child { cursor: pointer; }
+.panel .options .group-caret { display: inline-block; color: var(--ink-soft); font-size: 9px; margin-right: 4px; transition: transform .15s; }
+.panel .options .group-choice { margin: 0 5px 0 0; accent-color: var(--shu); vertical-align: -1px; }
+.panel .options > li.closed .group-caret { transform: rotate(-90deg); }
+.panel .options > li.closed { max-height: 30px; overflow: hidden; }
+.panel .steps li.opts-closed .options { display: none; }
+.panel .steps li.opts-closed .row-caret { transform: rotate(-90deg); }
+.panel .options > li.sel-group { box-shadow: inset 0 0 0 2px var(--shu); }
+
+/* ojo del conjunto de elección: fantasma u ocultar los NO elegidos (solo si
+   ya hay una elección — sin radio marcado no se atenúa ni oculta nada) */
+.panel .steps li .eye-toggle { position: absolute; top: 22px; right: 0; z-index: 2; border: none; background: none; font-size: 13px; line-height: 1; padding: 2px; cursor: pointer; opacity: .65; }
+.panel .steps li .eye-toggle:hover { opacity: 1; }
+/* 🙈 solo oculta en el MAPA: en la barra las opciones no elegidas siguen
+   visibles, apenas más apagadas que el fantasma de 👁 */
+.panel .options.eye-ghost:has(.group-choice:checked) > li:not(:has(.group-choice:checked)) { opacity: .35; }
+.panel .options.eye-hide:has(.group-choice:checked) > li:not(:has(.group-choice:checked)) { opacity: .2; }
+/* elección anidada: el radio vive en cada opción; el ojo actúa a ese nivel */
+.panel .options .option-choice { margin: 0 5px 0 0; accent-color: var(--shu); vertical-align: -1px; }
+.panel .options .option:has(.option-choice:checked) a { color: var(--shu); font-weight: 700; }
+.panel .options.eye-ghost:has(.option-choice:checked) .option:not(:has(.option-choice:checked)) { opacity: .35; }
+.panel .options.eye-hide:has(.option-choice:checked) .option:not(:has(.option-choice:checked)) { opacity: .2; }
+.panel .options.eye-ghost:has(.option-choice:checked) > li[data-tier]:not(:has(.option-choice:checked)) { opacity: .35; }
+.panel .options.eye-hide:has(.option-choice:checked) > li[data-tier]:not(:has(.option-choice:checked)) { opacity: .2; }
+
+/* options en columna única dentro de la barra */
+.panel .options { grid-template-columns: 1fr; }
+.panel .options > li:has(> .steps) { padding: 4px 8px 6px; }
+.panel .options .steps > li { grid-template-columns: 16px 42px minmax(0, 1fr); }
+.panel .options .steps > li > .ck { grid-column: 1; grid-row: 1; }
+.panel .options .steps > li > .time { grid-column: 2; }
+.panel .options .steps > li .title { grid-column: 3; grid-row: 1; }
+.panel .options .steps > li .note { grid-column: 3; grid-row: 2; }
+
+/* ---------- popup = la tarjeta completa (en teléfono es la única vista) ----------
+   Si es alta se colapsa tras «Ver más»; expandida scrollea, tope 40% de la pantalla. */
+.leaflet-popup-content-wrapper { background: var(--card); color: var(--ink); }
+.leaflet-popup-tip { background: var(--card); }
+.popup-card .modal { max-height: 40vh; overflow-y: auto; }
+/* colapsado: si la tarjeta tiene renglón Sale/Llega (.ride), el corte es
+   SEMÁNTICO justo debajo de él; si no (lugares), corte por altura */
+.popup-card.collapsed .modal { max-height: 18vh; overflow: hidden; }
+.popup-card.collapsed .modal:has(.ride) { max-height: none; overflow: visible; }
+.popup-card.collapsed .modal .ride ~ * { display: none; }
+.popup-card .see-more { display: block; width: 100%; margin-top: 6px; padding: 6px; border: none; border-radius: 6px; background: var(--paper-2); color: var(--shu); font: 700 12px "Segoe UI", system-ui, sans-serif; cursor: pointer; }
+/* piezas por día de un lugar repetido: colapsadas = día + una línea */
+.popup-card .uses { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 6px; }
+.popup-card .use { margin: 4px 0; }
+.popup-card .use summary { cursor: pointer; font-size: 12px; }
+.popup-card .use summary b { color: var(--shu); }
+.popup-card .use .use-line { display: block; font-size: 12px; color: var(--ink-soft); margin-left: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.popup-card .use .use-note { font-size: 12.5px; margin: 4px 0 2px 14px; }
+
+/* ---------- teléfono: el mapa es la vista; el panel se abre con ☰ ---------- */
+/* botones flotantes de la derecha: base común, cada uno solo fija su altura */
+.panel-toggle, .dev-toggle, .free-toggle { position: absolute; right: 10px; z-index: 1100; width: 40px; height: 40px; border: none; border-radius: 10px; background: var(--card); color: var(--ink); box-shadow: 0 2px 8px rgba(0,0,0,.28); font-size: 17px; cursor: pointer; }
+.panel-toggle { display: none; top: 46px; font-size: 18px; }
+@media (max-width: 820px) {
+  .panel, .splitter { display: none; }
+  .panel-toggle { display: block; }
+  body.panel-open .panel { display: block; position: absolute; top: 0; left: 0; bottom: 0; width: min(85vw, 380px) !important; /* !important: le gana al width inline que deja el splitter */ max-width: none; z-index: 1050; box-shadow: 4px 0 18px rgba(0,0,0,.3); }
+}
+
+/* ---------- modo dev (solo localhost): editor de pasos YAML ---------- */
+.dev-toggle { top: 94px; }
+.dev-toggle.on { background: var(--shu); }
+.free-toggle { top: 142px; }
+.free-toggle.on { background: var(--matcha); }
+.dev-drawer { position: absolute; right: 10px; bottom: 10px; z-index: 1300; width: min(520px, 92vw); background: var(--card); color: var(--ink); border-radius: 10px; box-shadow: 0 10px 40px rgba(0,0,0,.35); padding: 12px; }
+.dev-drawer .dev-info { font: 11px ui-monospace, Consolas, monospace; color: var(--ink-soft); white-space: pre-wrap; margin-bottom: 8px; }
+.dev-drawer textarea { width: 100%; min-height: 200px; box-sizing: border-box; font: 12px ui-monospace, Consolas, monospace; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink); padding: 8px; resize: vertical; }
+.dev-drawer .dev-btns { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.dev-drawer .dev-btns button { border: 1px solid var(--line); background: var(--paper-2); color: var(--ink); border-radius: 6px; padding: 6px 12px; font: 600 12px "Segoe UI", system-ui, sans-serif; cursor: pointer; }
+.dev-drawer .dev-save { background: var(--shu); color: #fff; border-color: var(--shu); }
+.dev-drawer .dev-rebuild { background: var(--ai); color: #fff; border-color: var(--ai); }
+.dev-drawer .dev-msg { font: 11px ui-monospace, Consolas, monospace; color: var(--ink-soft); }
+.dev-drawer .dev-refs { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
+.dev-drawer .dev-refs button { border: 1px solid var(--line); background: var(--paper-2); color: var(--ink); border-radius: 999px; padding: 3px 10px; font: 600 11px "Segoe UI", system-ui, sans-serif; cursor: pointer; }
+.dev-drawer .dev-refs button:hover { border-color: var(--shu); color: var(--shu); }
+.dev-drawer .dev-entity { margin-top: 6px; min-height: 140px; }
+.dev-drawer .dev-entity-name { font: 11px ui-monospace, Consolas, monospace; color: var(--ink-soft); }
+
+/* ---------- geometría viva: insignias, flechas, estaciones, editor ---------- */
+/* insignia de cronología: número de visita del día sobre el lugar */
+.seq-badge { background: var(--shu); color: #fff; border: 2px solid #fff; border-radius: 11px; text-align: center; font: 700 12px/18px system-ui, sans-serif; box-shadow: 0 1px 4px rgba(0, 0, 0, .4); }
+.seq-badge.plain { border-radius: 50%; }             /* sin número: punto simple */
+.seq-badge.ghost { opacity: .3; }
+/* flechas de dirección sobre las líneas: el glifo gira sobre el CENTRO exacto
+   del icono (con inline-block giraba sobre su caja de texto y se desfasaba
+   de la línea — se notaba en el Midosuji) */
+.chev { pointer-events: none; background: none; border: none; }
+.chev span { display: block; width: 16px; height: 16px; line-height: 16px; text-align: center; font: 700 13px/16px system-ui, sans-serif; transform-origin: 50% 50%; text-shadow: 0 0 3px #fff, 0 0 3px #fff; }
+/* editor de segmentos (modo dev): vértice arrastrable y punto medio insertable */
+.geo-pt { background: #d4a017; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 1px 3px rgba(0, 0, 0, .45); cursor: grab; }
+.geo-mid { background: #fff; border: 2px solid #d4a017; border-radius: 50%; opacity: .75; cursor: copy; }
+
+/* ---------- stepper: recorrido paso a paso (principal en teléfono) ----------
+   SIN barra de fondo: cada pieza flota como su propia pastilla (‹ › pegados
+   a las orillas, título centrado) y el mapa se ve y se usa entre ellas —
+   en teléfono la barra sólida tapaba medio mapa y los botones de zoom.
+   El stepper de DÍA vive abajo, igual de suelto. */
+.stepper { position: absolute; top: 0; left: 0; right: 0; z-index: 1000; font-size: 12.5px; pointer-events: none; }
+.stepper .st-row { display: flex; align-items: center; gap: 8px; padding: 8px; }
+/* pastilla flotante común del caminador (ambas barras) */
+.stepper .st-prev, .stepper .st-next, .stepper .st-cur, .stepper .st-jump-toggle, .stepper .st-col-head,
+.day-stepper button, .day-stepper .ds-cur { pointer-events: auto; background: var(--card); border: 1px solid var(--line); border-radius: 999px; box-shadow: 0 2px 8px rgba(0, 0, 0, .22); }
+.stepper .st-prev, .stepper .st-next { border-radius: 50%; width: 34px; height: 34px; font-size: 18px; line-height: 1; cursor: pointer; padding: 0; color: var(--shu); flex: 0 0 auto; }
+.stepper button:disabled { opacity: .25; cursor: default; }
+.stepper .st-center { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.stepper .st-cur { padding: 5px 14px; max-width: 60vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.stepper .st-opt { pointer-events: auto; border: 1px solid var(--line); background: var(--paper-2); color: var(--ink); border-radius: 999px; padding: 2px 10px; cursor: pointer; font-size: 12px; text-align: left; box-shadow: 0 1px 5px rgba(0, 0, 0, .18); }
+.stepper .st-opt.chosen { border-color: var(--shu); }
+.stepper .st-opt.on { border-color: var(--shu); color: var(--shu); font-weight: 700; }
+/* colores del tier en las pastillas y su etiqueta (sin colapso por columna) */
+.stepper [data-tier="Take"].st-opt { background: var(--matcha-soft); border-color: var(--matcha); }
+.stepper [data-tier="Ai"].st-opt { background: var(--ai-soft); border-color: var(--ai); }
+.stepper [data-tier="Shu"].st-opt { background: var(--shu-soft); border-color: var(--shu); }
+.stepper .st-col-head[data-tier="Take"] { color: var(--matcha); }
+.stepper .st-col-head[data-tier="Ai"] { color: var(--ai); }
+.stepper .st-col-head[data-tier="Shu"] { color: var(--shu); }
+.stepper .st-opt.on[data-tier] { box-shadow: inset 0 0 0 1px currentColor; color: var(--shu); }
+/* respaldo por POSICIÓN para viajes cuyos tiers no se llamen Take/Ai/Shu */
+.stepper .st-col:nth-child(1) .st-opt:not([data-tier="Take"]):not([data-tier="Ai"]):not([data-tier="Shu"]) { background: var(--matcha-soft); border-color: var(--matcha); }
+.stepper .st-col:nth-child(2) .st-opt:not([data-tier="Take"]):not([data-tier="Ai"]):not([data-tier="Shu"]) { background: var(--ai-soft); border-color: var(--ai); }
+.stepper .st-col:nth-child(3) .st-opt:not([data-tier="Take"]):not([data-tier="Ai"]):not([data-tier="Shu"]) { background: var(--shu-soft); border-color: var(--shu); }
+.stepper .st-col { display: inline-flex; flex-direction: column; gap: 3px; vertical-align: top; }
+.stepper .st-col-head { align-self: flex-start; border: none; padding: 1px 8px; box-shadow: 0 1px 5px rgba(0, 0, 0, .18); font-weight: 700; font-size: 11px; color: var(--ink-soft); }
+.stepper .st-jump { padding: 0 10px 6px; }
+.stepper .st-jump-toggle { padding: 2px 10px; box-shadow: 0 1px 5px rgba(0, 0, 0, .18); font-size: 11px; color: var(--ink-soft); cursor: pointer; display: block; margin: 0 auto; }
+.stepper .st-jump-body { margin-top: 5px; display: flex; gap: 6px; flex-wrap: wrap; align-items: flex-start; justify-content: center; }
+
+/* stepper de día: piezas sueltas abajo, sin barra */
+.day-stepper { position: absolute; bottom: 0; left: 0; right: 0; z-index: 1000; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; font-size: 12.5px; pointer-events: none; }
+.day-stepper button { color: var(--shu); font-size: 12.5px; font-weight: 700; cursor: pointer; padding: 5px 12px; flex: 0 0 auto; }
+.day-stepper button:disabled { opacity: .25; cursor: default; }
+.day-stepper .ds-cur { padding: 5px 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+
+/* el cromo de Leaflet solo libra la fila de pastillas de arriba/abajo */
+#map .leaflet-top .leaflet-control { margin-top: 52px; }
+#map .leaflet-bottom .leaflet-control { margin-bottom: 42px; }
+
+/* alta de referencias nuevas en el cajón dev */
+.dev-drawer .dev-newref { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink); font: 12px ui-monospace, monospace; padding: 4px 8px; }
+.dev-drawer .dev-tpl-label { color: var(--ink-soft); font-size: 11px; align-self: center; }
+
+/* pestañas de la app en la barra del mapa */
+.panel .app-tabs { padding: 0 0 6px; }
