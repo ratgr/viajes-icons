@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Mapa por día del viaje familiar a Japón — 4 al 18 de octubre de 2026.">
+<meta name="theme-color" content="#b23a2a">
+<title>Japón 2026 · mapa por día</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗺️</text></svg>">
+<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="stylesheet" href="itinerario.css">
+<link rel="stylesheet" href="mapa.css">
+<script src="vendor/leaflet.js"></script>
+</head>
+<body>
+<aside class="panel">
+  <div class="phead">
+    <h1>⛩️ Japón 2026 · mapa por día</h1>
+    <p class="sub">Casilla = prender/apagar en el mapa · toca un nombre para su tarjeta.</p>
+  </div>
+  <nav class="app-tabs" aria-label="Secciones">
+    <a href="itinerario.html">🗓️ Itinerario</a>
+    <a class="on" href="mapa.html">🗺️ Mapa</a>
+    <a target="_top" href="https://gist.githack.com/ratgr/c43412512acbd89d5faa0fddc04526d6/raw/japon.html?go=resumen">ℹ️ Info</a>
+    <a target="_top" href="https://gist.githack.com/ratgr/c43412512acbd89d5faa0fddc04526d6/raw/japon.html?go=hoteles">🏨 Hoteles</a>
+    <a target="_top" href="https://gist.githack.com/ratgr/c43412512acbd89d5faa0fddc04526d6/raw/japon.html?go=precios">💴 Precios</a>
+    <a target="_top" href="https://gist.githack.com/ratgr/c43412512acbd89d5faa0fddc04526d6/raw/japon.html?go=deseos">❤ Deseos</a>
+    <a target="_top" href="https://gist.githack.com/ratgr/c43412512acbd89d5faa0fddc04526d6/raw/japon.html?go=mapa">📋 Resumen</a>
+  </nav>
+  <nav class="day-nav" aria-label="Días"><!--NAV--></nav>
+<!--DAYS-->
+</aside>
+<div class="splitter" id="splitter" title="Arrastra para ajustar · doble click restaura"></div>
+<div id="map"></div>
+<script id="geo" type="application/json"><!--GEO--></script>
+<template id="modal-store">
+<!--MODALS-->
+</template>
+<dialog class="overlay" id="overlay"><button class="overlay-close" type="button" aria-label="Cerrar">×</button><div id="overlay-body"></div></dialog>
+<script src="itinerario.js"></script>
+<script src="mapa.js"></script>
+</body>
+</html>
